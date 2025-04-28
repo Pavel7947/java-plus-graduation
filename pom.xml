@@ -13,7 +13,8 @@
     <name>Explore With Me</name>
     <modules>
         <module>stats</module>
-        <module>main-service</module>
+        <module>infra</module>
+        <module>core</module>
     </modules>
 
     <groupId>ru.practicum</groupId>
@@ -26,6 +27,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <lombok.version>1.18.38</lombok.version>
+        <spring-cloud-dependencies.version>2023.0.3</spring-cloud-dependencies.version>
     </properties>
 
     <dependencyManagement>
@@ -36,26 +38,35 @@
                 <version>${lombok.version}</version>
                 <optional>true</optional>
             </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud-dependencies.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>${maven-compiler-plugin.version}</version>
-                    <configuration>
-                        <annotationProcessorPaths>
-                            <path>
-                                <groupId>org.projectlombok</groupId>
-                                <artifactId>lombok</artifactId>
-                                <version>${lombok.version}</version>
-                            </path>
-                        </annotationProcessorPaths>
-                    </configuration>
-                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
