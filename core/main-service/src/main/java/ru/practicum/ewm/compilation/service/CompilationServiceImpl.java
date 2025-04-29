@@ -88,7 +88,7 @@ public class CompilationServiceImpl implements CompilationService {
             allCompilations = compilationRepository.findAllByPinned(pageRequest, pinned);
         }
         Map<Long, EventShortDto> allEventDto = mapToEventShort(allCompilations.stream()
-                .flatMap(compilation -> compilation.getEvents().stream()).toList())
+                .flatMap(compilation -> compilation.getEvents().stream()).distinct().toList())
                 .stream().collect(Collectors.toMap(EventShortDto::getId, Function.identity()));
         List<CompilationDto> compilationDtoList = new ArrayList<>();
         for (Compilation compilation : allCompilations) {
