@@ -5,7 +5,6 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.partrequest.enums.Status;
-import ru.practicum.ewm.user.model.User;
 
 import java.time.LocalDateTime;
 
@@ -27,9 +26,8 @@ public class ParticipationRequest {
     @ManyToOne
     @JoinColumn(name = "event_id")
     Event event;
-    @ManyToOne
-    @JoinColumn(name = "requester_id")
-    User requester;
+    @Column(name = "requester_id")
+    Long requesterId;
     @Enumerated(value = EnumType.STRING)
     Status status;
 

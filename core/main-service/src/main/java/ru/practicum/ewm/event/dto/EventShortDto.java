@@ -3,12 +3,12 @@ package ru.practicum.ewm.event.dto;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import ru.practicum.ewm.category.dto.CategoryDto;
-import ru.practicum.ewm.user.dto.UserShortDto;
+import ru.practicum.ewm.dto.category.CategoryDto;
+import ru.practicum.ewm.dto.user.UserShortDto;
 
 import java.time.LocalDateTime;
 
-import static ru.practicum.ewm.utils.date.DateTimeFormat.TIME_PATTERN;
+import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Builder

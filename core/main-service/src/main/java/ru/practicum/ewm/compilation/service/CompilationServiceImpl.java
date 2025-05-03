@@ -1,15 +1,18 @@
 package ru.practicum.ewm.compilation.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.ewm.client.UserServiceClient;
 import ru.practicum.ewm.compilation.dto.CompilationDto;
 import ru.practicum.ewm.compilation.dto.NewCompilationDto;
 import ru.practicum.ewm.compilation.dto.UpdateCompilationRequest;
 import ru.practicum.ewm.compilation.mapper.CompilationMapper;
 import ru.practicum.ewm.compilation.model.Compilation;
 import ru.practicum.ewm.compilation.repository.CompilationRepository;
+import ru.practicum.ewm.dto.user.UserDto;
 import ru.practicum.ewm.event.dto.EventShortDto;
 import ru.practicum.ewm.event.mapper.EventMapper;
 import ru.practicum.ewm.event.model.Event;
@@ -26,10 +29,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Service
 @Transactional(readOnly = true)
+@Slf4j
 public class CompilationServiceImpl implements CompilationService {
     private final CompilationRepository compilationRepository;
     private final EventRepository eventRepository;
     private final StatClient statClient;
+    private final UserServiceClient userServiceClient;
 
     @Override
     @Transactional
@@ -123,17 +128,33 @@ public class CompilationServiceImpl implements CompilationService {
         List<String> urisList = events.stream().map(event -> "/events/" + event.getId()).toList();
         String uris = String.join(", ", urisList);
         List<StatsDto> statsList = statClient.getStats(minTime.minusSeconds(1), LocalDateTime.now(), uris, false);
+        Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
+                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
         return events.stream().map(event -> {
                     Optional<StatsDto> result = statsList.stream()
                             .filter(statsDto -> statsDto.getUri().equals("/events/" + event.getId()))
                             .findFirst();
+                    UserDto initiator = initiators.get(event.getInitiatorId());
                     if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits());
+                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator );
                     } else {
-                        return EventMapper.mapToShortDto(event, 0L);
+                        return EventMapper.mapToShortDto(event, 0L, initiator);
                     }
                 })
                 .collect(Collectors.toList());
+    }
+
+    private List<UserDto> getAllUsersForEvents(List<Event> events) {
+        List<Long> ids = events.stream().map(Event::getInitiatorId).distinct().toList();
+        List<UserDto> users = userServiceClient.getAllUsers(ids, 0, ids.size());
+        if (users.size() < ids.size()) {
+            Set<Long> findUserIds = users.stream().map(UserDto::getId).collect(Collectors.toSet());
+            String missingUserIds = ids.stream().filter(id -> !findUserIds.contains(id))
+                    .map(Object::toString).collect(Collectors.joining(", "));
+            log.debug("Некоторые пользователи не обнаружены при запросе: {}", missingUserIds);
+            throw new RuntimeException();
+        }
+        return users;
     }
 }
 

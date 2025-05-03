@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import ru.practicum.ewm.event.model.Event;
-import ru.practicum.ewm.user.model.User;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -30,9 +29,8 @@ public class Comment {
     @JoinColumn(name = "event_id")
     Event event;
 
-    @ManyToOne
-    @JoinColumn(name = "author_id")
-    User author;
+    @Column(name = "author_id")
+    Long authorId;
 
     @ElementCollection
     @CollectionTable(name = "comments_likes", joinColumns = @JoinColumn(name = "comment_id"))

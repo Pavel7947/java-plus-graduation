@@ -8,11 +8,11 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import ru.practicum.ewm.UpdateObject;
 import ru.practicum.ewm.event.enums.StateAction;
-import ru.practicum.ewm.event.model.Location;
+import ru.practicum.ewm.dto.event.Location;
 
 import java.time.LocalDateTime;
 
-import static ru.practicum.ewm.utils.date.DateTimeFormat.TIME_PATTERN;
+import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 
 @Getter
 @Setter

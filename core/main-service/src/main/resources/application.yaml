@@ -20,3 +20,7 @@ eureka:
     preferIpAddress: false
     hostname: localhost
     instanceId: ${spring.application.name}:${vcap.application.instance_id:${spring.application.instance_id:${random.value}}}
+logging:
+  level:
+    root:
+      debug

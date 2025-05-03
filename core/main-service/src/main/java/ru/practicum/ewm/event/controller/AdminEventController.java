@@ -9,16 +9,16 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.ewm.UpdateObject;
 import ru.practicum.ewm.event.dto.EventAdminFilter;
-import ru.practicum.ewm.event.dto.EventFullDto;
+import ru.practicum.ewm.dto.event.EventFullDto;
 import ru.practicum.ewm.event.dto.UpdateEventAdminRequest;
-import ru.practicum.ewm.event.enums.State;
+import ru.practicum.ewm.dto.event.State;
 import ru.practicum.ewm.event.service.EventService;
 import ru.practicum.ewm.exception.InvalidDateTimeException;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static ru.practicum.ewm.utils.date.DateTimeFormat.TIME_PATTERN;
+import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 
 @Slf4j
 @AllArgsConstructor
