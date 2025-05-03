@@ -136,7 +136,7 @@ public class CompilationServiceImpl implements CompilationService {
                             .findFirst();
                     UserDto initiator = initiators.get(event.getInitiatorId());
                     if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator );
+                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator);
                     } else {
                         return EventMapper.mapToShortDto(event, 0L, initiator);
                     }

@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import ru.practicum.ewm.UpdateObject;
-import ru.practicum.ewm.event.enums.StateAction;
 import ru.practicum.ewm.dto.event.Location;
+import ru.practicum.ewm.event.enums.StateAction;
 
 import java.time.LocalDateTime;
 
