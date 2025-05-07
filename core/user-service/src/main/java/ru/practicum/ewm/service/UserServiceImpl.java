@@ -5,22 +5,26 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.ewm.client.EventServiceClient;
 import ru.practicum.ewm.dto.user.NewUserRequest;
 import ru.practicum.ewm.dto.user.UserDto;
 import ru.practicum.ewm.exception.DuplicateException;
 import ru.practicum.ewm.exception.NotFoundException;
+import ru.practicum.ewm.exception.ValidationException;
 import ru.practicum.ewm.mapper.UserDtoMapper;
+import ru.practicum.ewm.model.User;
 import ru.practicum.ewm.repository.UserRepository;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Slf4j
 public class UserServiceImpl implements UserService {
-
     private final UserRepository userRepository;
+    private final EventServiceClient eventClient;
 
     @Override
     public List<UserDto> getAllUsers(List<Long> ids, Integer from, Integer size) {
@@ -59,5 +63,29 @@ public class UserServiceImpl implements UserService {
     public UserDto getUserById(Long userId) {
         return UserDtoMapper.toUserDto(userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id: " + userId + ". Не найден")));
+    }
+
+    @Transactional
+    @Override
+    public UserDto addBanCommited(Long userId, Long eventId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id: " + userId + ". Не найден"));
+        eventClient.getEventById(eventId, false, false);
+        Set<Long> forbiddenCommentEvents = user.getForbiddenCommentEvents();
+        if (forbiddenCommentEvents.contains(eventId)) {
+            throw new ValidationException("Уже добавлен такой запрет на комментирование");
+        }
+        forbiddenCommentEvents.add(eventId);
+        return UserDtoMapper.toUserDto(user);
+    }
+
+    @Transactional
+    @Override
+    public void deleteBanCommited(Long userId, Long eventId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id: " + userId + ". Не найден"));
+        if (!user.getForbiddenCommentEvents().remove(eventId)) {
+            throw new NotFoundException("Такого запрета на комментирование не найдено");
+        }
     }
 }

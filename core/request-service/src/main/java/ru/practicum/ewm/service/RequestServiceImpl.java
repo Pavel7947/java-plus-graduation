@@ -47,7 +47,7 @@ public class RequestServiceImpl implements RequestService {
             throw new DuplicateException("Такой запрос уже существует");
         }
         userServiceClient.getUserById(userId);
-        EventFullDto event = eventServiceClient.getEventById(eventId, false);
+        EventFullDto event = eventServiceClient.getEventById(eventId, false, true);
         if (event.getInitiator().getId().equals(userId)) {
             throw new ConflictDataException("Пользователь не может создать запрос на участие в своем же событии");
         }
@@ -106,7 +106,7 @@ public class RequestServiceImpl implements RequestService {
     @Override
     public List<RequestDto> getRequestsOfUserEvent(Long userId, Long eventId) {
         userServiceClient.getUserById(userId);
-        EventFullDto event = eventServiceClient.getEventById(eventId, false);
+        EventFullDto event = eventServiceClient.getEventById(eventId, false, true);
         if (!Objects.equals(event.getInitiator().getId(), userId)) {
             log.error("userId отличается от id создателя события");
             throw new ValidationException("Событие должно быть создано текущим пользователем");
@@ -120,7 +120,7 @@ public class RequestServiceImpl implements RequestService {
     public EventRequestStatusUpdateResult updateRequestsStatus(Long userId, Long eventId,
                                                                EventRequestStatusUpdateRequest updateRequest) {
         userServiceClient.getUserById(userId);
-        EventFullDto event = eventServiceClient.getEventById(eventId, false);
+        EventFullDto event = eventServiceClient.getEventById(eventId, false, true);
         if (!Objects.equals(event.getInitiator().getId(), userId)) {
             throw new ValidationException("Событие должно быть создано текущим пользователем");
         }

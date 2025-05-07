@@ -3,3 +3,9 @@ CREATE TABLE IF NOT EXISTS users(
   email VARCHAR(254) NOT NULL UNIQUE,
   name VARCHAR(250) NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ban_comments(
+    event_id BIGINT NOT NULL,
+    user_id BIGINT REFERENCES users(user_id) ON DELETE CASCADE,
+    PRIMARY KEY (event_id, user_id)
+);

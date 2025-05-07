@@ -45,4 +45,16 @@ public class UserAdminController implements UserServiceAdminResource {
         log.info("Пришел запрос на удаление пользователя");
         userService.deleteUser(userId);
     }
+
+    @Override
+    public UserDto addBanCommited(Long userId, Long eventId) {
+        log.info("Получили запрос от администартора на добавление запрета комментирования");
+        return userService.addBanCommited(userId, eventId);
+    }
+
+    @Override
+    public void deleteBanCommited(Long userId, Long eventId) {
+        log.info("Получили запрос от администратора на отмену запрета комментирования");
+        userService.deleteBanCommited(userId, eventId);
+    }
 }

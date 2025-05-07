@@ -26,7 +26,7 @@ public interface EventService {
 
     List<EventFullDto> getEventsForAdmin(EventAdminFilter admin);
 
-    EventFullDto getEventForAdmin(Long eventId, Boolean includeConfirmedRequests);
+    EventFullDto getEventForAdmin(Long eventId, Boolean includeConfirmedRequests, Boolean includeAuthorAdditionalInfo);
 
     EventFullDto updateEventAdmin(Long eventId, UpdateEventAdminRequest updateEventAdminRequest);
 }

@@ -323,15 +323,20 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public EventFullDto getEventForAdmin(Long eventId, Boolean includeConfirmedRequests) {
+    public EventFullDto getEventForAdmin(Long eventId, Boolean includeConfirmedRequests, Boolean includeAuthorAdditionalInfo) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", eventId)));
         int confirmedRequestCount = 0;
         if (includeConfirmedRequests) {
             confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
         }
+        UserDto initiator;
+        if (includeAuthorAdditionalInfo) {
+            initiator = userServiceClient.getUserById(event.getInitiatorId());
+        } else {
+            initiator = UserDto.builder().id(event.getInitiatorId()).build();
+        }
         Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
-        UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
         return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
                 confirmedRequestCount);
     }

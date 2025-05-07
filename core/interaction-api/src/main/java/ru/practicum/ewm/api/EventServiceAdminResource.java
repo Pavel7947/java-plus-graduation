@@ -29,7 +29,8 @@ public interface EventServiceAdminResource {
 
     @GetMapping("/admin/events/{eventId}")
     EventFullDto getEventById(@PathVariable @Positive Long eventId,
-                              @RequestParam(defaultValue = "true") Boolean includeConfirmedRequests);
+                              @RequestParam(defaultValue = "true") Boolean includeConfirmedRequests,
+                              @RequestParam(defaultValue = "true") Boolean includeAuthorAdditionalInfo);
 
     @PatchMapping("/admin/events/{eventId}")
     public EventFullDto updateEvent(@PositiveOrZero @PathVariable Long eventId,

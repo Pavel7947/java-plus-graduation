@@ -26,4 +26,12 @@ public interface UserServiceAdminResource {
     @DeleteMapping("/admin/users/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void deleteUser(@PathVariable Long userId);
+
+    @PutMapping("/admin/users/{userId}/ban/comments")
+    UserDto addBanCommited(@PathVariable Long userId, @RequestParam(defaultValue = "0") Long eventId);
+
+
+    @DeleteMapping("/admin/users/{userId}/ban/comments")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteBanCommited(@PathVariable Long userId, @RequestParam(defaultValue = "0") Long eventId);
 }

@@ -74,8 +74,8 @@ public class AdminEventController implements EventServiceAdminResource {
     }
 
     @Override
-    public EventFullDto getEventById(Long eventId, Boolean includeConfirmedRequests) {
+    public EventFullDto getEventById(Long eventId, Boolean includeConfirmedRequests, Boolean includeAuthorAdditionalInfo) {
         log.info("Запрос на получение события по id");
-        return eventService.getEventForAdmin(eventId, includeConfirmedRequests);
+        return eventService.getEventForAdmin(eventId, includeConfirmedRequests, includeAuthorAdditionalInfo);
     }
 }

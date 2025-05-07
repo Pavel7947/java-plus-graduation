@@ -14,4 +14,8 @@ public interface UserService {
     void deleteUser(Long id);
 
     UserDto getUserById(Long userId);
+
+    UserDto addBanCommited(Long userId, Long eventId);
+
+    void deleteBanCommited(Long userId, Long eventId);
 }

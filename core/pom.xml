@@ -17,5 +17,6 @@
         <module>interaction-api</module>
         <module>exception-library</module>
         <module>request-service</module>
+        <module>comment-service</module>
     </modules>
 </project>

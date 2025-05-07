@@ -18,6 +18,7 @@ public class UserDtoMapper {
         return UserDto.builder()
                 .email(user.getEmail())
                 .id(user.getId())
+                .forbiddenCommentEvents(user.getForbiddenCommentEvents())
                 .name(user.getName())
                 .build();
     }
