@@ -4,11 +4,11 @@ import lombok.experimental.UtilityClass;
 import ru.practicum.ewm.category.mapper.CategoryMapper;
 import ru.practicum.ewm.category.model.Category;
 import ru.practicum.ewm.dto.event.EventFullDto;
+import ru.practicum.ewm.dto.event.EventShortDto;
 import ru.practicum.ewm.dto.event.Location;
 import ru.practicum.ewm.dto.event.State;
 import ru.practicum.ewm.dto.user.UserDto;
 import ru.practicum.ewm.dto.user.UserShortDto;
-import ru.practicum.ewm.event.dto.EventShortDto;
 import ru.practicum.ewm.event.dto.NewEventDto;
 import ru.practicum.ewm.event.model.Event;
 
@@ -22,7 +22,6 @@ public class EventMapper {
                 .annotation(eventDto.getAnnotation())
                 .paid(eventDto.getPaid())
                 .category(category)
-                .confirmedRequests(0)
                 .createdOn(LocalDateTime.now())
                 .description(eventDto.getDescription())
                 .state(State.PENDING)
@@ -36,12 +35,12 @@ public class EventMapper {
                 .build();
     }
 
-    public EventFullDto mapToFullDto(Event event, Long views, UserDto initiator) {
+    public EventFullDto mapToFullDto(Event event, Long views, UserDto initiator, Integer confirmedRequests) {
         return EventFullDto.builder()
                 .id(event.getId())
                 .annotation(event.getAnnotation())
                 .category(CategoryMapper.toCategoryDto(event.getCategory()))
-                .confirmedRequests(event.getConfirmedRequests())
+                .confirmedRequests(confirmedRequests)
                 .createdOn(event.getCreatedOn())
                 .publishedOn(event.getPublishedOn())
                 .description(event.getDescription())
@@ -58,11 +57,11 @@ public class EventMapper {
                 .build();
     }
 
-    public EventShortDto mapToShortDto(Event event, Long views, UserDto initiator) {
+    public EventShortDto mapToShortDto(Event event, Long views, UserDto initiator, Integer confirmedRequests) {
         return EventShortDto.builder()
                 .annotation(event.getAnnotation())
                 .category(CategoryMapper.toCategoryDto(event.getCategory()))
-                .confirmedRequests(event.getConfirmedRequests())
+                .confirmedRequests(confirmedRequests)
                 .eventDate(event.getEventDate())
                 .publishedOn(event.getPublishedOn())
                 .id(event.getId())

@@ -7,9 +7,7 @@ import ru.practicum.ewm.dto.DateTimeFormat;
 import ru.practicum.ewm.dto.category.CategoryDto;
 import ru.practicum.ewm.dto.user.UserShortDto;
 
-
 import java.time.LocalDateTime;
-
 
 
 @FieldDefaults(level = AccessLevel.PRIVATE)

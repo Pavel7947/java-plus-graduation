@@ -14,6 +14,7 @@ import java.util.List;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class EventAdminFilter {
+    List<Long> events;
     List<Long> users;
     List<State> states;
     List<Long> categories;
@@ -21,6 +22,7 @@ public class EventAdminFilter {
     LocalDateTime rangeEnd;
     Boolean paid;
     Boolean onlyAvailable;
+    Boolean includeConfirmedRequests;
     Integer from;
     Integer size;
 }

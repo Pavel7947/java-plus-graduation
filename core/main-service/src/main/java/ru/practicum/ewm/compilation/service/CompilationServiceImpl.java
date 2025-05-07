@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.ewm.client.RequestServiceClient;
 import ru.practicum.ewm.client.UserServiceClient;
 import ru.practicum.ewm.compilation.dto.CompilationDto;
 import ru.practicum.ewm.compilation.dto.NewCompilationDto;
@@ -12,8 +13,9 @@ import ru.practicum.ewm.compilation.dto.UpdateCompilationRequest;
 import ru.practicum.ewm.compilation.mapper.CompilationMapper;
 import ru.practicum.ewm.compilation.model.Compilation;
 import ru.practicum.ewm.compilation.repository.CompilationRepository;
+import ru.practicum.ewm.dto.event.EventShortDto;
+import ru.practicum.ewm.dto.request.RequestDto;
 import ru.practicum.ewm.dto.user.UserDto;
-import ru.practicum.ewm.event.dto.EventShortDto;
 import ru.practicum.ewm.event.mapper.EventMapper;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.event.repository.EventRepository;
@@ -35,6 +37,7 @@ public class CompilationServiceImpl implements CompilationService {
     private final EventRepository eventRepository;
     private final StatClient statClient;
     private final UserServiceClient userServiceClient;
+    private final RequestServiceClient requestClient;
 
     @Override
     @Transactional
@@ -130,15 +133,20 @@ public class CompilationServiceImpl implements CompilationService {
         List<StatsDto> statsList = statClient.getStats(minTime.minusSeconds(1), LocalDateTime.now(), uris, false);
         Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
                 .collect(Collectors.toMap(UserDto::getId, Function.identity()));
+        Map<Long, Integer> confirmedRequestsCount = getConfirmedRequestsForEvents(events).stream()
+                .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
         return events.stream().map(event -> {
                     Optional<StatsDto> result = statsList.stream()
                             .filter(statsDto -> statsDto.getUri().equals("/events/" + event.getId()))
                             .findFirst();
                     UserDto initiator = initiators.get(event.getInitiatorId());
+                    var requestsCount = confirmedRequestsCount.get(event.getId());
                     if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator);
+                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator,
+                                requestsCount != null ? requestsCount : 0);
                     } else {
-                        return EventMapper.mapToShortDto(event, 0L, initiator);
+                        return EventMapper.mapToShortDto(event, 0L, initiator,
+                                requestsCount != null ? requestsCount : 0);
                     }
                 })
                 .collect(Collectors.toList());
@@ -155,6 +163,21 @@ public class CompilationServiceImpl implements CompilationService {
             throw new RuntimeException();
         }
         return users;
+    }
+
+    private List<RequestDto> getConfirmedRequestsForEvents(List<Event> events) {
+        log.info("Получаем список подтверждённых запросов для всех событий.");
+        List<Long> eventIds = events.stream().map(Event::getId).toList();
+        List<RequestDto> confirmedRequests = new ArrayList<>();
+        boolean hasMoreElements = true;
+        int from = 0;
+        while (hasMoreElements) {
+            List<RequestDto> requests = requestClient.getAllRequests(eventIds, true, from, 100);
+            confirmedRequests.addAll(requests);
+            hasMoreElements = requests.size() == 100;
+            from += 100;
+        }
+        return confirmedRequests;
     }
 }
 

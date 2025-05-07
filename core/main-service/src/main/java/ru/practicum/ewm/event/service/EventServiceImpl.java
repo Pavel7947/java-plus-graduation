@@ -12,23 +12,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.ewm.category.model.Category;
 import ru.practicum.ewm.category.repository.CategoryRepository;
+import ru.practicum.ewm.client.RequestServiceClient;
 import ru.practicum.ewm.client.UserServiceClient;
-import ru.practicum.ewm.dto.event.EventFullDto;
-import ru.practicum.ewm.dto.event.State;
+import ru.practicum.ewm.dto.event.*;
+import ru.practicum.ewm.dto.request.RequestDto;
 import ru.practicum.ewm.dto.user.UserDto;
-import ru.practicum.ewm.event.dto.*;
-import ru.practicum.ewm.event.enums.StateAction;
+import ru.practicum.ewm.event.dto.EventAdminFilter;
+import ru.practicum.ewm.event.dto.EventPublicFilter;
+import ru.practicum.ewm.event.dto.NewEventDto;
+import ru.practicum.ewm.event.dto.UpdateEventUserRequest;
 import ru.practicum.ewm.event.mapper.EventMapper;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.event.model.QEvent;
 import ru.practicum.ewm.event.repository.EventRepository;
 import ru.practicum.ewm.exception.*;
-import ru.practicum.ewm.partrequest.dto.ParticipationRequestDto;
-import ru.practicum.ewm.partrequest.enums.Status;
-import ru.practicum.ewm.partrequest.mapper.ParticipationRequestMapper;
-import ru.practicum.ewm.partrequest.model.ParticipationRequest;
-import ru.practicum.ewm.partrequest.repository.ParticipationRequestRepository;
-import ru.practicum.ewm.partrequest.service.ParticipationRequestService;
 import ru.practicum.ewm.stats.client.StatClient;
 import ru.practicum.ewm.stats.dto.EndpointHitDto;
 import ru.practicum.ewm.stats.dto.StatsDto;
@@ -50,9 +47,7 @@ public class EventServiceImpl implements EventService {
 
     private final UserServiceClient userServiceClient;
 
-    private final ParticipationRequestRepository requestRepository;
-
-    private final ParticipationRequestService requestService;
+    private final RequestServiceClient requestClient;
 
     private final StatClient statClient;
 
@@ -70,7 +65,7 @@ public class EventServiceImpl implements EventService {
             eventDto.setCommenting(true);
         }
         Event event = eventRepository.save(EventMapper.mapToEvent(eventDto, category, initiator.getId()));
-        return EventMapper.mapToFullDto(event, 0L, initiator);
+        return EventMapper.mapToFullDto(event, 0L, initiator, 0);
     }
 
     @Override
@@ -89,15 +84,20 @@ public class EventServiceImpl implements EventService {
 
         List<StatsDto> statsList = statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
                 LocalDateTime.now(), uris, false);
-
+        Map<Long, Integer> confirmedRequestsCountMap = getConfirmedRequestsForEvents(events.stream().map(Event::getId).toList())
+                .stream().collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
         return events.stream().map(event -> {
+                    Long eventId = event.getId();
                     Optional<StatsDto> result = statsList.stream()
-                            .filter(statsDto -> statsDto.getUri().equals("/events/" + event.getId()))
+                            .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
                             .findFirst();
+                    Integer confirmedRequestsCount = confirmedRequestsCountMap.get(eventId);
                     if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator);
+                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator,
+                                confirmedRequestsCount != null ? confirmedRequestsCount : 0);
                     } else {
-                        return EventMapper.mapToShortDto(event, 0L, initiator);
+                        return EventMapper.mapToShortDto(event, 0L, initiator,
+                                confirmedRequestsCount != null ? confirmedRequestsCount : 0);
                     }
                 })
                 .toList();
@@ -114,10 +114,11 @@ public class EventServiceImpl implements EventService {
         List<StatsDto> statsList = statClient.getStats(event.getCreatedOn().minusSeconds(1), LocalDateTime.now(), uri,
                 false);
         Optional<StatsDto> result = statsList.stream().findFirst();
+        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
         if (result.isPresent()) {
-            return EventMapper.mapToFullDto(event, result.get().getHits(), initiator);
+            return EventMapper.mapToFullDto(event, result.get().getHits(), initiator, confirmedRequestCount);
         } else {
-            return EventMapper.mapToFullDto(event, 0L, initiator);
+            return EventMapper.mapToFullDto(event, 0L, initiator, confirmedRequestCount);
         }
     }
 
@@ -178,8 +179,8 @@ public class EventServiceImpl implements EventService {
                 event.setState(State.CANCELED);
             }
         }
-
-        return EventMapper.mapToFullDto(event, 0L, initiator);
+        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
+        return EventMapper.mapToFullDto(event, 0L, initiator, confirmedRequestCount);
     }
 
     //public Получение событий с возможностью фильтрации
@@ -206,9 +207,6 @@ public class EventServiceImpl implements EventService {
         } else {
             conditions = conditions.and(QEvent.event.eventDate.after(LocalDateTime.now()));
         }
-        if (inputFilter.getOnlyAvailable()) {
-            conditions = conditions.and(QEvent.event.confirmedRequests.loe(QEvent.event.participantLimit));
-        }
         List<Event> events = eventRepository.findAll(conditions, pageRequest).getContent();
 
         if (events.isEmpty()) {
@@ -226,31 +224,28 @@ public class EventServiceImpl implements EventService {
                 LocalDateTime.now(), uris, false);
         Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
                 .collect(Collectors.toMap(UserDto::getId, Function.identity()));
-
+        Map<Long, Integer> confirmedRequestsCountMap = getConfirmedRequestsForEvents(events.stream().map(Event::getId).toList())
+                .stream().collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
+        if (inputFilter.getOnlyAvailable()) {
+            events = events.stream()
+                    .filter(event -> confirmedRequestsCountMap.get(event.getId()) < event.getParticipantLimit()).toList();
+        }
         List<EventShortDto> result = events.stream().map(event -> {
-
-                    Optional<StatsDto> stat = statsList.stream()
-                            .filter(statsDto -> statsDto.getUri().equals("/events/" + event.getId()))
-                            .findFirst();
-                    return EventMapper.mapToShortDto(event,
-                            stat.isPresent() ? stat.get().getHits() : 0L, initiators.get(event.getInitiatorId()));
-                })
-                .toList();
+            Long eventId = event.getId();
+            Optional<StatsDto> stat = statsList.stream()
+                    .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
+                    .findFirst();
+            Integer confirmedRequestsCount = confirmedRequestsCountMap.get(eventId);
+            return EventMapper.mapToShortDto(event,
+                    stat.isPresent() ? stat.get().getHits() : 0L, initiators.get(event.getInitiatorId()),
+                    confirmedRequestsCount != null ? confirmedRequestsCount : 0);
+        }).toList();
         List<EventShortDto> resultList = new ArrayList<>(result);
 
         switch (inputFilter.getSort()) {
             case EVENT_DATE -> resultList.sort(Comparator.comparing(EventShortDto::getEventDate));
             case VIEWS -> resultList.sort(Comparator.comparing(EventShortDto::getViews).reversed());
         }
-
-        var ids = resultList.stream().map(EventShortDto::getId).toList();
-        Map<Long, List<ParticipationRequest>> confirmedRequests = requestService.prepareConfirmedRequests(ids);
-
-        resultList.forEach(r -> {
-            var requests = confirmedRequests.get(r.getId());
-
-            r.setConfirmedRequests(requests != null ? requests.size() : 0);
-        });
 
         try {
             EndpointHitDto requestBody = EndpointHitDto
@@ -282,12 +277,10 @@ public class EventServiceImpl implements EventService {
         Optional<StatsDto> stat = statClient.getStats(event.getCreatedOn().minusSeconds(1),
                 LocalDateTime.now(), "/events/" + event.getId(), true).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
+        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(id)).size();
 
-        EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator);
-
-        List<ParticipationRequest> confirmedRequests = requestService
-                .prepareConfirmedRequests(List.of(event.getId())).get(event.getId());
-        result.setConfirmedRequests(confirmedRequests != null ? confirmedRequests.size() : 0);
+        EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
+                confirmedRequestCount);
 
         try {
             EndpointHitDto requestBody = EndpointHitDto
@@ -321,6 +314,9 @@ public class EventServiceImpl implements EventService {
         if (input.getUsers() != null) {
             conditions = conditions.and(QEvent.event.initiatorId.in(input.getUsers()));
         }
+        if (input.getEvents() != null) {
+            conditions = conditions.and(QEvent.event.id.in(input.getEvents()));
+        }
         if (input.getStates() != null) {
             conditions = conditions.and(QEvent.event.state.in(input.getStates()));
         }
@@ -338,23 +334,25 @@ public class EventServiceImpl implements EventService {
 
         List<StatsDto> statsList = statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
                 LocalDateTime.now(), uris, false);
-        var ids = events.stream().map(Event::getId).toList();
-        Map<Long, List<ParticipationRequest>> confirmedRequests = requestService.prepareConfirmedRequests(ids);
-
+        Map<Long, Integer> confirmedRequestsCount;
+        if (input.getIncludeConfirmedRequests()) {
+            var ids = events.stream().map(Event::getId).toList();
+            confirmedRequestsCount = getConfirmedRequestsForEvents(ids).stream()
+                    .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
+        } else {
+            confirmedRequestsCount = Map.of();
+        }
         Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
                 .collect(Collectors.toMap(UserDto::getId, Function.identity()));
 
         return events.stream().map(event -> {
-
+                    Long eventId = event.getId();
                     Optional<StatsDto> stat = statsList.stream()
-                            .filter(statsDto -> statsDto.getUri().equals("/events/" + event.getId()))
+                            .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
                             .findFirst();
-                    var requests = confirmedRequests.get(event.getId());
-                    var r = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
-                            initiators.get(event.getInitiatorId()));
-
-                    r.setConfirmedRequests(requests != null ? requests.size() : 0);
-                    return r;
+                    var requests = confirmedRequestsCount.get(eventId);
+                    return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+                            initiators.get(event.getInitiatorId()), requests != null ? requests : 0);
                 })
                 .toList();
 
@@ -420,77 +418,24 @@ public class EventServiceImpl implements EventService {
         Optional<StatsDto> stat = statClient.getStats(event.getCreatedOn().minusSeconds(1), LocalDateTime.now(),
                 "/events/" + event.getId(), false).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
-        EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator);
-
-        List<ParticipationRequest> confirmedRequests = requestService
-                .prepareConfirmedRequests(List.of(event.getId())).get(event.getId());
-        result.setConfirmedRequests(confirmedRequests != null ? confirmedRequests.size() : 0);
-
-        return result;
+        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
+        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
+                confirmedRequestCount);
     }
 
     @Override
-    public List<ParticipationRequestDto> getRequestsOfUserEvent(Long userId, Long eventId) {
-        userServiceClient.getUserById(userId);
-        Event event = eventRepository.findById(eventId).orElseThrow(() -> new NotFoundException("Событие не найдено"));
-        if (!Objects.equals(event.getInitiatorId(), userId)) {
-            log.error("userId отличается от id создателя события");
-            throw new ValidationException("Событие должно быть создано текущим пользователем");
+    public EventFullDto getEventForAdmin(Long eventId, Boolean includeConfirmedRequests) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", eventId)));
+        int confirmedRequestCount = 0;
+        if (includeConfirmedRequests) {
+            confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
         }
-        return ParticipationRequestMapper
-                .toParticipationRequestDto(requestRepository.findAllByEventInitiatorIdAndEventId(userId, eventId));
-    }
-
-    @Override
-    @Transactional
-    public EventRequestStatusUpdateResult updateRequestsStatus(EventRequestStatusUpdateRequest updateRequest,
-                                                               Long userId, Long eventId) {
-        userServiceClient.getUserById(userId);
-        Event event = eventRepository.findById(eventId).orElseThrow(() -> new NotFoundException("Событие не найдено"));
-        if (!Objects.equals(event.getInitiatorId(), userId)) {
-            throw new ValidationException("Событие должно быть создано текущим пользователем");
-        }
-        if (Objects.equals(event.getConfirmedRequests(), event.getParticipantLimit())) {
-            throw new ConflictDataException("Лимит участников уже исчерпан");
-        }
-        List<Long> requestIds = updateRequest.getRequestIds();
-        log.info("Получили список id запросов на участие: {}", requestIds);
-        List<ParticipationRequest> requestList = requestRepository.findAllById(requestIds);
-        if (requestList.stream().anyMatch(request -> !Objects.equals(request.getEvent().getId(), eventId))) {
-            throw new ValidationException("Все запросы должны принадлежать одному событию");
-        }
-        List<ParticipationRequest> confirmedRequestsList = new ArrayList<>();
-        List<ParticipationRequest> rejectedRequests = new ArrayList<>();
-        if (event.getRequestModeration() && event.getParticipantLimit() != 0) {
-            switch (updateRequest.getStatus()) {
-                case CONFIRMED -> requestList.forEach(request -> {
-                    if (request.getStatus() != Status.PENDING) {
-                        throw new ConflictDataException("Можно изменить только статус PENDING");
-                    }
-                    if (Objects.equals(event.getConfirmedRequests(), event.getParticipantLimit())) {
-                        request.setStatus(Status.REJECTED);
-                        rejectedRequests.add(request);
-                    } else {
-                        request.setStatus(Status.CONFIRMED);
-                        Integer confirmedRequests = event.getConfirmedRequests();
-                        event.setConfirmedRequests(++confirmedRequests);
-                        confirmedRequestsList.add(request);
-                    }
-                });
-                case REJECTED -> requestList.forEach(request -> {
-                    if (request.getStatus() != Status.PENDING) {
-                        throw new ConflictDataException("Можно изменить только статус PENDING");
-                    }
-                    request.setStatus(Status.REJECTED);
-                    rejectedRequests.add(request);
-                });
-            }
-        }
-
-        return new EventRequestStatusUpdateResult(confirmedRequestsList.stream()
-                .map(ParticipationRequestMapper::toParticipationRequestDto)
-                .toList(), rejectedRequests.stream().map(ParticipationRequestMapper::toParticipationRequestDto)
-                .toList());
+        Optional<StatsDto> stat = statClient.getStats(event.getCreatedOn().minusSeconds(1), LocalDateTime.now(),
+                "/events/" + event.getId(), false).stream().findFirst();
+        UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
+        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
+                confirmedRequestCount);
     }
 
     private void checkFields(NewEventDto dto) {
@@ -543,5 +488,19 @@ public class EventServiceImpl implements EventService {
             throw new RuntimeException();
         }
         return users;
+    }
+
+    private List<RequestDto> getConfirmedRequestsForEvents(List<Long> eventIds) {
+        log.info("Получаем список подтверждённых запросов для всех событий.");
+        List<RequestDto> confirmedRequests = new ArrayList<>();
+        boolean hasMoreElements = true;
+        int from = 0;
+        while (hasMoreElements) {
+            List<RequestDto> requests = requestClient.getAllRequests(eventIds, true, from, 100);
+            confirmedRequests.addAll(requests);
+            hasMoreElements = requests.size() == 100;
+            from += 100;
+        }
+        return confirmedRequests;
     }
 }

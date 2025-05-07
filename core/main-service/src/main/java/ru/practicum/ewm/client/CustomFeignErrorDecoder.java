@@ -7,6 +7,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import ru.practicum.ewm.dto.ErrorResponse;
+import ru.practicum.ewm.exception.ConflictDataException;
 import ru.practicum.ewm.exception.NotFoundException;
 
 @Slf4j
@@ -29,6 +30,9 @@ public class CustomFeignErrorDecoder implements ErrorDecoder {
         } else if (response.status() == HttpStatus.BAD_REQUEST.value()) {
             log.debug("Получен статус 400 с телом {}", body);
             return new BadRequestException(body.message());
+        } else if (response.status() == HttpStatus.CONFLICT.value()) {
+            log.debug("Получен статус 409 с телом {}", body);
+            return new ConflictDataException(body.message());
         }
         return defaultDecoder.decode(methodKey, response);
     }

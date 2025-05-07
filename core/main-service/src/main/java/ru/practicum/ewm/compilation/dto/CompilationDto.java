@@ -2,7 +2,7 @@ package ru.practicum.ewm.compilation.dto;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import ru.practicum.ewm.event.dto.EventShortDto;
+import ru.practicum.ewm.dto.event.EventShortDto;
 
 import java.util.List;
 

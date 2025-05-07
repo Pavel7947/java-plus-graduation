@@ -1,43 +1,36 @@
 package ru.practicum.ewm.event.controller;
 
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
-import ru.practicum.ewm.UpdateObject;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import ru.practicum.ewm.api.EventServiceAdminResource;
 import ru.practicum.ewm.dto.event.EventFullDto;
 import ru.practicum.ewm.dto.event.State;
+import ru.practicum.ewm.dto.event.UpdateEventAdminRequest;
 import ru.practicum.ewm.event.dto.EventAdminFilter;
-import ru.practicum.ewm.event.dto.UpdateEventAdminRequest;
 import ru.practicum.ewm.event.service.EventService;
 import ru.practicum.ewm.exception.InvalidDateTimeException;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
-
 @Slf4j
 @AllArgsConstructor
 @RestController
-@RequestMapping("/admin/events")
 @Validated
-public class AdminEventController {
+public class AdminEventController implements EventServiceAdminResource {
 
     private final EventService eventService;
 
-    @GetMapping
-    public List<EventFullDto>
-    getEventsForAdmin(@RequestParam(required = false) List<Long> users,
-                      @RequestParam(required = false) List<State> states,
-                      @RequestParam(required = false) List<Long> categories,
-                      @RequestParam(required = false) @DateTimeFormat(pattern = TIME_PATTERN) LocalDateTime rangeStart,
-                      @RequestParam(required = false) @DateTimeFormat(pattern = TIME_PATTERN) LocalDateTime rangeEnd,
-                      @PositiveOrZero @RequestParam(defaultValue = "0") Integer from,
-                      @Positive @RequestParam(defaultValue = "10") Integer size) {
+    @Override
+    public List<EventFullDto> getEventsForAdmin(List<Long> events, List<Long> users, List<State> states,
+                                                List<Long> categories, Boolean includeConfirmedRequests,
+                                                LocalDateTime rangeStart, LocalDateTime rangeEnd, Integer from,
+                                                Integer size) {
         log.info("Получение полной информации обо всех событиях подходящих под переданные условия.");
 
         var filter = EventAdminFilter
@@ -47,6 +40,8 @@ public class AdminEventController {
                 .categories(categories)
                 .from(from)
                 .size(size)
+                .events(events)
+                .includeConfirmedRequests(includeConfirmedRequests)
                 .build();
 
         if (rangeStart != null && rangeEnd != null) {
@@ -59,22 +54,28 @@ public class AdminEventController {
         try {
             return eventService.getEventsForAdmin(filter);
         } catch (Exception e) {
-            log.error("При запуске с параметрами " + filter, e);
+            log.error("При запуске с параметрами {}", filter, e);
             throw e;
         }
 
     }
 
-    @PatchMapping("/{eventId}")
+    @Override
     public EventFullDto updateEvent(@PositiveOrZero @PathVariable Long eventId,
-                                    @Validated(UpdateObject.class) @RequestBody UpdateEventAdminRequest updateEventAdminRequest) {
+                                    @Validated @RequestBody UpdateEventAdminRequest updateEventAdminRequest) {
         log.info("Редактирование данных любого события администратором.");
 
         try {
             return eventService.updateEventAdmin(eventId, updateEventAdminRequest);
         } catch (Exception e) {
-            log.error("При запуске updateEvent c eventId" + eventId + ", параметрами " + updateEventAdminRequest, e);
+            log.error("При запуске updateEvent c id: {}, с параметрами {}", eventId, updateEventAdminRequest, e);
             throw e;
         }
+    }
+
+    @Override
+    public EventFullDto getEventById(Long eventId, Boolean includeConfirmedRequests) {
+        log.info("Запрос на получение события по id");
+        return eventService.getEventForAdmin(eventId, includeConfirmedRequests);
     }
 }
