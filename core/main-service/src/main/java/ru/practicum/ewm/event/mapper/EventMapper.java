@@ -7,12 +7,19 @@ import ru.practicum.ewm.dto.event.EventFullDto;
 import ru.practicum.ewm.dto.event.EventShortDto;
 import ru.practicum.ewm.dto.event.Location;
 import ru.practicum.ewm.dto.event.State;
+import ru.practicum.ewm.dto.request.RequestDto;
 import ru.practicum.ewm.dto.user.UserDto;
 import ru.practicum.ewm.dto.user.UserShortDto;
 import ru.practicum.ewm.event.dto.NewEventDto;
 import ru.practicum.ewm.event.model.Event;
+import ru.practicum.ewm.stats.dto.StatsDto;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @UtilityClass
 public class EventMapper {
@@ -71,6 +78,47 @@ public class EventMapper {
                 .views(views)
                 .commenting(event.getCommenting())
                 .build();
+    }
+
+    public List<EventShortDto> mapToShortDto(List<Event> events, List<UserDto> initiators, List<StatsDto> statsList,
+                                             List<RequestDto> confirmedRequests) {
+        Map<Long, Integer> confirmedRequestsCountMap = confirmedRequests.stream()
+                .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
+        return mapToShortDto(events, initiators, statsList, confirmedRequestsCountMap);
+    }
+
+    public List<EventShortDto> mapToShortDto(List<Event> events, List<UserDto> initiators, List<StatsDto> statsList,
+                                             Map<Long, Integer> confirmedRequestsCountMap) {
+        Map<Long, UserDto> initiatorsMap = initiators.stream()
+                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
+        return events.stream().map(event -> {
+            Long eventId = event.getId();
+            Optional<StatsDto> stat = statsList.stream()
+                    .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
+                    .findFirst();
+            Integer confirmedRequestsCount = confirmedRequestsCountMap.get(eventId);
+            return mapToShortDto(event,
+                    stat.isPresent() ? stat.get().getHits() : 0L, initiatorsMap.get(event.getInitiatorId()),
+                    confirmedRequestsCount != null ? confirmedRequestsCount : 0);
+        }).toList();
+    }
+
+    public List<EventFullDto> mapToFullDto(List<Event> events, List<UserDto> initiators, List<StatsDto> statsList,
+                                           List<RequestDto> confirmedRequests) {
+        Map<Long, Integer> confirmedRequestsCountMap = confirmedRequests.stream()
+                .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
+        Map<Long, UserDto> initiatorsMap = initiators.stream()
+                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
+        return events.stream().map(event -> {
+                    Long eventId = event.getId();
+                    Optional<StatsDto> stat = statsList.stream()
+                            .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
+                            .findFirst();
+                    var requests = confirmedRequestsCountMap.get(eventId);
+                    return mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+                            initiatorsMap.get(event.getInitiatorId()), requests != null ? requests : 0);
+                })
+                .toList();
     }
 
     private UserShortDto mapToUserShort(UserDto userDto) {

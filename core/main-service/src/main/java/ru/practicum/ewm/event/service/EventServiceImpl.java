@@ -32,7 +32,6 @@ import ru.practicum.ewm.stats.dto.StatsDto;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -74,33 +73,7 @@ public class EventServiceImpl implements EventService {
         Sort sortByCreatedDate = Sort.by("createdOn");
         PageRequest pageRequest = PageRequest.of(from / size, size, sortByCreatedDate);
         List<Event> events = eventRepository.findAllByInitiatorId(userId, pageRequest);
-
-        List<String> urisList = events
-                .stream()
-                .map(event -> "/events/" + event.getId())
-                .toList();
-
-        String uris = String.join(", ", urisList);
-
-        List<StatsDto> statsList = statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
-                LocalDateTime.now(), uris, false);
-        Map<Long, Integer> confirmedRequestsCountMap = getConfirmedRequestsForEvents(events.stream().map(Event::getId).toList())
-                .stream().collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
-        return events.stream().map(event -> {
-                    Long eventId = event.getId();
-                    Optional<StatsDto> result = statsList.stream()
-                            .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
-                            .findFirst();
-                    Integer confirmedRequestsCount = confirmedRequestsCountMap.get(eventId);
-                    if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator,
-                                confirmedRequestsCount != null ? confirmedRequestsCount : 0);
-                    } else {
-                        return EventMapper.mapToShortDto(event, 0L, initiator,
-                                confirmedRequestsCount != null ? confirmedRequestsCount : 0);
-                    }
-                })
-                .toList();
+        return EventMapper.mapToShortDto(events, List.of(initiator), getStats(events, false), getConfirmedRequests(events));
     }
 
     @Override
@@ -110,13 +83,10 @@ public class EventServiceImpl implements EventService {
         if (!Objects.equals(event.getInitiatorId(), userId)) {
             throw new ValidationException("Можно просмотреть только своё событие");
         }
-        String uri = "/events/" + eventId;
-        List<StatsDto> statsList = statClient.getStats(event.getCreatedOn().minusSeconds(1), LocalDateTime.now(), uri,
-                false);
-        Optional<StatsDto> result = statsList.stream().findFirst();
-        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
-        if (result.isPresent()) {
-            return EventMapper.mapToFullDto(event, result.get().getHits(), initiator, confirmedRequestCount);
+        Optional<StatsDto> stats = getStats(List.of(event), false).stream().findFirst();
+        int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
+        if (stats.isPresent()) {
+            return EventMapper.mapToFullDto(event, stats.get().getHits(), initiator, confirmedRequestCount);
         } else {
             return EventMapper.mapToFullDto(event, 0L, initiator, confirmedRequestCount);
         }
@@ -179,7 +149,7 @@ public class EventServiceImpl implements EventService {
                 event.setState(State.CANCELED);
             }
         }
-        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
+        int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
         return EventMapper.mapToFullDto(event, 0L, initiator, confirmedRequestCount);
     }
 
@@ -212,34 +182,14 @@ public class EventServiceImpl implements EventService {
         if (events.isEmpty()) {
             return new ArrayList<>();
         }
-
-        List<String> urisList = events
-                .stream()
-                .map(event -> "/events/" + event.getId())
-                .toList();
-
-        String uris = String.join(", ", urisList);
-
-        List<StatsDto> statsList = statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
-                LocalDateTime.now(), uris, false);
-        Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
-                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
-        Map<Long, Integer> confirmedRequestsCountMap = getConfirmedRequestsForEvents(events.stream().map(Event::getId).toList())
+        Map<Long, Integer> confirmedRequestsCountMap = getConfirmedRequests(events)
                 .stream().collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
         if (inputFilter.getOnlyAvailable()) {
             events = events.stream()
                     .filter(event -> confirmedRequestsCountMap.get(event.getId()) < event.getParticipantLimit()).toList();
         }
-        List<EventShortDto> result = events.stream().map(event -> {
-            Long eventId = event.getId();
-            Optional<StatsDto> stat = statsList.stream()
-                    .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
-                    .findFirst();
-            Integer confirmedRequestsCount = confirmedRequestsCountMap.get(eventId);
-            return EventMapper.mapToShortDto(event,
-                    stat.isPresent() ? stat.get().getHits() : 0L, initiators.get(event.getInitiatorId()),
-                    confirmedRequestsCount != null ? confirmedRequestsCount : 0);
-        }).toList();
+        List<EventShortDto> result = EventMapper.mapToShortDto(events, getInitiators(events),
+                getStats(events, false), confirmedRequestsCountMap);
         List<EventShortDto> resultList = new ArrayList<>(result);
 
         switch (inputFilter.getSort()) {
@@ -247,18 +197,7 @@ public class EventServiceImpl implements EventService {
             case VIEWS -> resultList.sort(Comparator.comparing(EventShortDto::getViews).reversed());
         }
 
-        try {
-            EndpointHitDto requestBody = EndpointHitDto
-                    .builder().app(serviceName)
-                    .ip(httpServletRequest.getRemoteAddr())
-                    .uri(httpServletRequest.getRequestURI())
-                    .timestamp(LocalDateTime.now())
-                    .build();
-            statClient.saveHit(requestBody);
-            log.info("Сохранение статистики.");
-        } catch (SaveStatsException e) {
-            log.error("Не удалось сохранить статистику.");
-        }
+        saveHit(httpServletRequest);
 
         return resultList;
     }
@@ -274,28 +213,13 @@ public class EventServiceImpl implements EventService {
             throw new NotFoundException("Посмотреть можно только опубликованное событие.");
 
 
-        Optional<StatsDto> stat = statClient.getStats(event.getCreatedOn().minusSeconds(1),
-                LocalDateTime.now(), "/events/" + event.getId(), true).stream().findFirst();
+        Optional<StatsDto> stat = getStats(List.of(event), true).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
-        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(id)).size();
+        int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
 
         EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
                 confirmedRequestCount);
-
-        try {
-            EndpointHitDto requestBody = EndpointHitDto
-                    .builder().app(serviceName)
-                    .ip(httpServletRequest.getRemoteAddr())
-                    .uri(httpServletRequest.getRequestURI())
-                    .timestamp(LocalDateTime.now())
-                    .build();
-
-            statClient.saveHit(requestBody);
-            log.info("Сохранение статистики.");
-        } catch (SaveStatsException e) {
-            log.error("Не удалось сохранить статистику.");
-        }
-
+        saveHit(httpServletRequest);
         return result;
     }
 
@@ -324,39 +248,15 @@ public class EventServiceImpl implements EventService {
             conditions = conditions.and(QEvent.event.category.id.in(input.getCategories()));
         }
         List<Event> events = eventRepository.findAll(conditions, pageable).getContent();
-
-        List<String> urisList = events
-                .stream()
-                .map(event -> "/events/" + event.getId())
-                .toList();
-
-        String uris = String.join(", ", urisList);
-
-        List<StatsDto> statsList = statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
-                LocalDateTime.now(), uris, false);
-        Map<Long, Integer> confirmedRequestsCount;
+        List<RequestDto> confirmedRequests;
         if (input.getIncludeConfirmedRequests()) {
-            var ids = events.stream().map(Event::getId).toList();
-            confirmedRequestsCount = getConfirmedRequestsForEvents(ids).stream()
-                    .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
+            confirmedRequests = getConfirmedRequests(events);
         } else {
-            confirmedRequestsCount = Map.of();
+            confirmedRequests = List.of();
         }
-        Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
-                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
-
-        return events.stream().map(event -> {
-                    Long eventId = event.getId();
-                    Optional<StatsDto> stat = statsList.stream()
-                            .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
-                            .findFirst();
-                    var requests = confirmedRequestsCount.get(eventId);
-                    return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
-                            initiators.get(event.getInitiatorId()), requests != null ? requests : 0);
-                })
-                .toList();
-
+        return EventMapper.mapToFullDto(events, getInitiators(events), getStats(events, false), confirmedRequests);
     }
+
 
     // admin Редактирование данных любого события администратором. Валидация данных не требуется
     @Transactional
@@ -415,10 +315,9 @@ public class EventServiceImpl implements EventService {
         }
         event = eventRepository.save(event);
 
-        Optional<StatsDto> stat = statClient.getStats(event.getCreatedOn().minusSeconds(1), LocalDateTime.now(),
-                "/events/" + event.getId(), false).stream().findFirst();
+        Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
-        int confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
+        int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
         return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
                 confirmedRequestCount);
     }
@@ -429,10 +328,9 @@ public class EventServiceImpl implements EventService {
                 .orElseThrow(() -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", eventId)));
         int confirmedRequestCount = 0;
         if (includeConfirmedRequests) {
-            confirmedRequestCount = getConfirmedRequestsForEvents(List.of(eventId)).size();
+            confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
         }
-        Optional<StatsDto> stat = statClient.getStats(event.getCreatedOn().minusSeconds(1), LocalDateTime.now(),
-                "/events/" + event.getId(), false).stream().findFirst();
+        Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
         return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
                 confirmedRequestCount);
@@ -477,7 +375,7 @@ public class EventServiceImpl implements EventService {
         }
     }
 
-    private List<UserDto> getAllUsersForEvents(List<Event> events) {
+    private List<UserDto> getInitiators(List<Event> events) {
         List<Long> ids = events.stream().map(Event::getInitiatorId).distinct().toList();
         List<UserDto> users = userServiceClient.getAllUsers(ids, 0, ids.size());
         if (users.size() < ids.size()) {
@@ -490,8 +388,9 @@ public class EventServiceImpl implements EventService {
         return users;
     }
 
-    private List<RequestDto> getConfirmedRequestsForEvents(List<Long> eventIds) {
+    private List<RequestDto> getConfirmedRequests(List<Event> events) {
         log.info("Получаем список подтверждённых запросов для всех событий.");
+        List<Long> eventIds = events.stream().map(Event::getId).distinct().toList();
         List<RequestDto> confirmedRequests = new ArrayList<>();
         boolean hasMoreElements = true;
         int from = 0;
@@ -502,5 +401,33 @@ public class EventServiceImpl implements EventService {
             from += 100;
         }
         return confirmedRequests;
+    }
+
+    private void saveHit(HttpServletRequest httpServletRequest) {
+        try {
+            EndpointHitDto requestBody = EndpointHitDto
+                    .builder().app(serviceName)
+                    .ip(httpServletRequest.getRemoteAddr())
+                    .uri(httpServletRequest.getRequestURI())
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            statClient.saveHit(requestBody);
+            log.info("Сохранение статистики.");
+        } catch (SaveStatsException e) {
+            log.error("Не удалось сохранить статистику.");
+        }
+    }
+
+    private List<StatsDto> getStats(List<Event> events, Boolean unique) {
+        List<String> urisList = events
+                .stream()
+                .map(event -> "/events/" + event.getId())
+                .toList();
+
+        String uris = String.join(", ", urisList);
+        return statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
+                LocalDateTime.now(), uris, unique);
+
     }
 }
