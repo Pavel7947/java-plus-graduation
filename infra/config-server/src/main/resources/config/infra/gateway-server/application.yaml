@@ -10,13 +10,13 @@ spring:
         - id: request_service_route
           uri: lb://request-service
           predicates:
-           - Path=/admin/requests, /users/*/events/*/requests, /users/*/requests/**
+            - Path=/admin/requests, /users/*/events/*/requests, /users/*/requests/**
         - id: comment_service_route
           uri: lb://comment-service
           predicates:
             - Path=/admin/comments/**, /comments/**, /users/{userId}/comments/**
-        - id: main_service_route
-          uri: lb://main-service
+        - id: event_service_route
+          uri: lb://event-service
           predicates:
             - Path=/**
 server:
