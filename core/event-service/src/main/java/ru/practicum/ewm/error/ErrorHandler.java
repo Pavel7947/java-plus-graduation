@@ -91,6 +91,13 @@ public class ErrorHandler {
         return new ErrorResponse(e.getMessage());
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ErrorResponse handleServiceUnavailable(ServiceUnavailableException e) {
+        log.debug("Получен статус 503 SERVICE-UNAVAILABLE {}", e.getMessage(), e);
+        return new ErrorResponse("Запрос не был обработан из-за того что сервер перегружен. Попробуйте еще раз");
+    }
+
     @ExceptionHandler
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleValidation(final ValidationException e) {

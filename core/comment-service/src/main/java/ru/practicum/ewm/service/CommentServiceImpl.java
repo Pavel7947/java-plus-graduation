@@ -6,8 +6,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.practicum.ewm.client.EventServiceClient;
-import ru.practicum.ewm.client.UserServiceClient;
+import ru.practicum.ewm.client.event.EventServiceClient;
+import ru.practicum.ewm.client.user.UserServiceClient;
 import ru.practicum.ewm.dto.CommentDto;
 import ru.practicum.ewm.dto.NewCommentDto;
 import ru.practicum.ewm.dto.event.EventFullDto;
@@ -102,6 +102,9 @@ public class CommentServiceImpl implements CommentService {
     public List<CommentDto> getAllComments(Long eventId, SortType sortType, Integer from, Integer size) {
         Pageable pageable = PageRequest.of(from / size, size);
         List<Comment> comments = commentRepository.findAllByEventId(eventId, pageable);
+        if (comments.isEmpty()) {
+            return List.of();
+        }
         Map<Long, UserDto> users = getAuthors(comments).stream()
                 .collect(Collectors.toMap(UserDto::getId, Function.identity()));
         Map<Long, EventFullDto> events = getEventsForComments(comments).stream()

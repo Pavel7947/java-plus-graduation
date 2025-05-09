@@ -8,8 +8,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.practicum.ewm.client.EventServiceClient;
-import ru.practicum.ewm.client.UserServiceClient;
+import ru.practicum.ewm.client.event.EventServiceClient;
+import ru.practicum.ewm.client.user.UserServiceClient;
 import ru.practicum.ewm.dto.EventRequestStatusUpdateRequest;
 import ru.practicum.ewm.dto.RequestSearchFilter;
 import ru.practicum.ewm.dto.event.EventFullDto;
@@ -69,7 +69,7 @@ public class RequestServiceImpl implements RequestService {
                 .eventId(eventId)
                 .status(status)
                 .build();
-        return RequestMapper.toParticipationRequestDto(requestRepository.save(request));
+        return RequestMapper.toRequestDto(requestRepository.save(request));
     }
 
     @Transactional
@@ -80,13 +80,13 @@ public class RequestServiceImpl implements RequestService {
                 .orElseThrow(() -> new NotFoundException("У пользователя с id: " + userId +
                         " не найдено запроса с id: " + requestId));
         request.setStatus(Status.CANCELED);
-        return RequestMapper.toParticipationRequestDto(request);
+        return RequestMapper.toRequestDto(request);
     }
 
     @Override
     public List<RequestDto> getAllUserRequests(Long userId) {
         userServiceClient.getUserById(userId);
-        return RequestMapper.toParticipationRequestDto(requestRepository.findAllByRequesterId(userId));
+        return RequestMapper.toRequestDto(requestRepository.findAllByRequesterId(userId));
     }
 
     @Override
@@ -100,7 +100,7 @@ public class RequestServiceImpl implements RequestService {
             conditions = conditions.and(QRequest.request.eventId.in(filter.getEventIds()));
         }
         return RequestMapper
-                .toParticipationRequestDto(requestRepository.findAll(conditions, pageable).getContent());
+                .toRequestDto(requestRepository.findAll(conditions, pageable).getContent());
     }
 
     @Override
@@ -112,7 +112,7 @@ public class RequestServiceImpl implements RequestService {
             throw new ValidationException("Событие должно быть создано текущим пользователем");
         }
         return RequestMapper
-                .toParticipationRequestDto(requestRepository.findAllByEventId(eventId));
+                .toRequestDto(requestRepository.findAllByEventId(eventId));
     }
 
     @Override
@@ -166,9 +166,9 @@ public class RequestServiceImpl implements RequestService {
 
         return EventRequestStatusUpdateResult.builder()
                 .confirmedRequests(confirmedRequests.stream()
-                        .map(RequestMapper::toParticipationRequestDto).toList())
+                        .map(RequestMapper::toRequestDto).toList())
                 .rejectedRequests(rejectedRequests.stream()
-                        .map(RequestMapper::toParticipationRequestDto).toList())
+                        .map(RequestMapper::toRequestDto).toList())
                 .build();
     }
 }

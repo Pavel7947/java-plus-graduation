@@ -2,6 +2,10 @@ server:
   port: 0
 
 spring:
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
   jpa:
     hibernate:
       ddl-auto: none
@@ -15,5 +19,26 @@ spring:
   datasource:
     driverClassName: org.postgresql.Driver
     url: jdbc:postgresql://localhost:5432/main
-    username: postgres
-    password: 52458
+    username: request-service
+    password: 5432
+
+resilience4j.circuitbreaker:
+  configs:
+    default:
+      slidingWindowSize: 50
+      failureRateThreshold: 50
+  instances:
+    user-service:
+      slidingWindowSize: 20
+      waitDurationInOpenState: 10000
+      permittedNumberOfCallsInHalfOpenState: 5
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true
+    event-service:
+      slidingWindowSize: 20
+      waitDurationInOpenState: 10000
+      permittedNumberOfCallsInHalfOpenState: 5
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true

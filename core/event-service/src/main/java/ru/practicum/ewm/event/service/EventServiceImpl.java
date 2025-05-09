@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.ewm.category.model.Category;
 import ru.practicum.ewm.category.repository.CategoryRepository;
-import ru.practicum.ewm.client.RequestServiceClient;
-import ru.practicum.ewm.client.UserServiceClient;
+import ru.practicum.ewm.client.request.RequestServiceClient;
+import ru.practicum.ewm.client.user.UserServiceClient;
 import ru.practicum.ewm.dto.event.*;
 import ru.practicum.ewm.dto.request.RequestDto;
 import ru.practicum.ewm.dto.user.UserDto;
@@ -22,6 +22,7 @@ import ru.practicum.ewm.event.dto.EventPublicFilter;
 import ru.practicum.ewm.event.dto.NewEventDto;
 import ru.practicum.ewm.event.dto.UpdateEventUserRequest;
 import ru.practicum.ewm.event.mapper.EventMapper;
+import ru.practicum.ewm.event.mapper.UserMapper;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.event.model.QEvent;
 import ru.practicum.ewm.event.repository.EventRepository;
@@ -64,7 +65,7 @@ public class EventServiceImpl implements EventService {
             eventDto.setCommenting(true);
         }
         Event event = eventRepository.save(EventMapper.mapToEvent(eventDto, category, initiator.getId()));
-        return EventMapper.mapToFullDto(event, 0L, initiator, 0);
+        return EventMapper.mapToFullDto(event, 0L, UserMapper.mapToUserShort(initiator), 0);
     }
 
     @Override
@@ -73,6 +74,9 @@ public class EventServiceImpl implements EventService {
         Sort sortByCreatedDate = Sort.by("createdOn");
         PageRequest pageRequest = PageRequest.of(from / size, size, sortByCreatedDate);
         List<Event> events = eventRepository.findAllByInitiatorId(userId, pageRequest);
+        if (events.isEmpty()) {
+            return List.of();
+        }
         return EventMapper.mapToShortDto(events, List.of(initiator), getStats(events, false), getConfirmedRequests(events));
     }
 
@@ -86,9 +90,11 @@ public class EventServiceImpl implements EventService {
         Optional<StatsDto> stats = getStats(List.of(event), false).stream().findFirst();
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
         if (stats.isPresent()) {
-            return EventMapper.mapToFullDto(event, stats.get().getHits(), initiator, confirmedRequestCount);
+            return EventMapper.mapToFullDto(event, stats.get().getHits(), UserMapper.mapToUserShort(initiator),
+                    confirmedRequestCount);
         } else {
-            return EventMapper.mapToFullDto(event, 0L, initiator, confirmedRequestCount);
+            return EventMapper.mapToFullDto(event, 0L, UserMapper.mapToUserShort(initiator),
+                    confirmedRequestCount);
         }
     }
 
@@ -150,7 +156,8 @@ public class EventServiceImpl implements EventService {
             }
         }
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-        return EventMapper.mapToFullDto(event, 0L, initiator, confirmedRequestCount);
+        return EventMapper.mapToFullDto(event, 0L, UserMapper.mapToUserShort(initiator),
+                confirmedRequestCount);
     }
 
     //public Получение событий с возможностью фильтрации
@@ -185,8 +192,13 @@ public class EventServiceImpl implements EventService {
         Map<Long, Integer> confirmedRequestsCountMap = getConfirmedRequests(events)
                 .stream().collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
         if (inputFilter.getOnlyAvailable()) {
-            events = events.stream()
-                    .filter(event -> confirmedRequestsCountMap.get(event.getId()) < event.getParticipantLimit()).toList();
+            if (!confirmedRequestsCountMap.isEmpty()) {
+                events = events.stream()
+                        .filter(event -> confirmedRequestsCountMap.get(event.getId()) < event.getParticipantLimit()).toList();
+            } else {
+                log.debug("Запрос отклонен так как нет необходимых данных о подтвержденных заявках");
+                throw new ServiceUnavailableException();
+            }
         }
         List<EventShortDto> result = EventMapper.mapToShortDto(events, getInitiators(events),
                 getStats(events, false), confirmedRequestsCountMap);
@@ -205,20 +217,15 @@ public class EventServiceImpl implements EventService {
     //public Получение подробной информации об опубликованном событии по его идентификатору
     @Override
     public EventFullDto getPublicEventById(HttpServletRequest httpServletRequest, Long id) {
-
         Event event = eventRepository.findById(id).orElseThrow(
                 () -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", id)));
-
         if (event.getState() != State.PUBLISHED)
             throw new NotFoundException("Посмотреть можно только опубликованное событие.");
-
-
         Optional<StatsDto> stat = getStats(List.of(event), true).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-
-        EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
-                confirmedRequestCount);
+        EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+                UserMapper.mapToUserShort(initiator), confirmedRequestCount);
         saveHit(httpServletRequest);
         return result;
     }
@@ -248,6 +255,9 @@ public class EventServiceImpl implements EventService {
             conditions = conditions.and(QEvent.event.category.id.in(input.getCategories()));
         }
         List<Event> events = eventRepository.findAll(conditions, pageable).getContent();
+        if (events.isEmpty()) {
+            return List.of();
+        }
         List<RequestDto> confirmedRequests;
         if (input.getIncludeConfirmedRequests()) {
             confirmedRequests = getConfirmedRequests(events);
@@ -318,8 +328,8 @@ public class EventServiceImpl implements EventService {
         Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
-                confirmedRequestCount);
+        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+                UserMapper.mapToUserShort(initiator), confirmedRequestCount);
     }
 
     @Override
@@ -337,8 +347,8 @@ public class EventServiceImpl implements EventService {
             initiator = UserDto.builder().id(event.getInitiatorId()).build();
         }
         Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
-        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L, initiator,
-                confirmedRequestCount);
+        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+                UserMapper.mapToUserShort(initiator), confirmedRequestCount);
     }
 
     private void checkFields(NewEventDto dto) {
@@ -358,7 +368,6 @@ public class EventServiceImpl implements EventService {
     }
 
     private void checkDateEvent(LocalDateTime newDateTime) {
-
         LocalDateTime now = LocalDateTime.now().plusHours(1);
         if (now.isAfter(newDateTime)) {
             throw new InvalidDateTimeException(String.format("Дата начала события должна быть позже текущего времени на %s ч.", 1));
@@ -366,7 +375,6 @@ public class EventServiceImpl implements EventService {
     }
 
     private void checkStateAction(Event oldEvent, UpdateEventAdminRequest newEvent) {
-
         if (newEvent.getStateAction() == StateAction.PUBLISH_EVENT) {
             if (oldEvent.getState() != State.PENDING) {
                 throw new OperationFailedException("Невозможно опубликовать событие. Его можно " +
@@ -383,12 +391,14 @@ public class EventServiceImpl implements EventService {
     private List<UserDto> getInitiators(List<Event> events) {
         List<Long> ids = events.stream().map(Event::getInitiatorId).distinct().toList();
         List<UserDto> users = userServiceClient.getAllUsers(ids, 0, ids.size());
+        if (users.isEmpty()) {
+            return users;
+        }
         if (users.size() < ids.size()) {
             Set<Long> findUserIds = users.stream().map(UserDto::getId).collect(Collectors.toSet());
             String missingUserIds = ids.stream().filter(id -> !findUserIds.contains(id))
                     .map(Object::toString).collect(Collectors.joining(", "));
             log.debug("Некоторые пользователи не обнаружены при запросе: {}", missingUserIds);
-            throw new RuntimeException();
         }
         return users;
     }

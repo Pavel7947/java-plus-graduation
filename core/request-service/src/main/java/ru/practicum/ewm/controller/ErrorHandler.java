@@ -9,10 +9,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import ru.practicum.ewm.dto.ErrorResponse;
-import ru.practicum.ewm.exception.ConflictDataException;
-import ru.practicum.ewm.exception.DuplicateException;
-import ru.practicum.ewm.exception.NotFoundException;
-import ru.practicum.ewm.exception.ValidationException;
+import ru.practicum.ewm.exception.*;
 
 @RestControllerAdvice
 @Slf4j
@@ -24,6 +21,13 @@ public class ErrorHandler {
         String message = e.getMessage();
         log.debug("Получен статус 400 BAD_REQUEST {}", message, e);
         return new ErrorResponse(message);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ErrorResponse handleServiceUnavailable(ServiceUnavailableException e) {
+        log.debug("Получен статус 503 SERVICE-UNAVAILABLE {}", e.getMessage(), e);
+        return new ErrorResponse("Запрос не был обработан из-за того что сервер перегружен. Попробуйте еще раз");
     }
 
     @ResponseStatus(HttpStatus.BAD_REQUEST)

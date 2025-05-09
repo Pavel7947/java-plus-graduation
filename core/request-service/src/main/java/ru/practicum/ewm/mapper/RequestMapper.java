@@ -9,7 +9,7 @@ import java.util.List;
 @UtilityClass
 public class RequestMapper {
 
-    public RequestDto toParticipationRequestDto(Request request) {
+    public RequestDto toRequestDto(Request request) {
         return RequestDto.builder()
                 .id(request.getId())
                 .requester(request.getRequesterId())
@@ -19,7 +19,7 @@ public class RequestMapper {
                 .build();
     }
 
-    public List<RequestDto> toParticipationRequestDto(List<Request> requests) {
-        return requests.stream().map(RequestMapper::toParticipationRequestDto).toList();
+    public List<RequestDto> toRequestDto(List<Request> requests) {
+        return requests.stream().map(RequestMapper::toRequestDto).toList();
     }
 }

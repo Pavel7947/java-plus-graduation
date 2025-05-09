@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.practicum.ewm.client.RequestServiceClient;
-import ru.practicum.ewm.client.UserServiceClient;
+import ru.practicum.ewm.client.request.RequestServiceClient;
+import ru.practicum.ewm.client.user.UserServiceClient;
 import ru.practicum.ewm.compilation.dto.CompilationDto;
 import ru.practicum.ewm.compilation.dto.NewCompilationDto;
 import ru.practicum.ewm.compilation.dto.UpdateCompilationRequest;
@@ -17,6 +17,7 @@ import ru.practicum.ewm.dto.event.EventShortDto;
 import ru.practicum.ewm.dto.request.RequestDto;
 import ru.practicum.ewm.dto.user.UserDto;
 import ru.practicum.ewm.event.mapper.EventMapper;
+import ru.practicum.ewm.event.mapper.UserMapper;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.event.repository.EventRepository;
 import ru.practicum.ewm.exception.NotFoundException;
@@ -95,6 +96,9 @@ public class CompilationServiceImpl implements CompilationService {
         } else {
             allCompilations = compilationRepository.findAllByPinned(pageRequest, pinned);
         }
+        if (allCompilations.isEmpty()) {
+            return List.of();
+        }
         Map<Long, EventShortDto> allEventDto = mapToEventShort(allCompilations.stream()
                 .flatMap(compilation -> compilation.getEvents().stream()).distinct().toList())
                 .stream().collect(Collectors.toMap(EventShortDto::getId, Function.identity()));
@@ -131,7 +135,7 @@ public class CompilationServiceImpl implements CompilationService {
         List<String> urisList = events.stream().map(event -> "/events/" + event.getId()).toList();
         String uris = String.join(", ", urisList);
         List<StatsDto> statsList = statClient.getStats(minTime.minusSeconds(1), LocalDateTime.now(), uris, false);
-        Map<Long, UserDto> initiators = getAllUsersForEvents(events).stream()
+        Map<Long, UserDto> initiators = getAllInitiators(events).stream()
                 .collect(Collectors.toMap(UserDto::getId, Function.identity()));
         Map<Long, Integer> confirmedRequestsCount = getConfirmedRequestsForEvents(events).stream()
                 .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
@@ -142,17 +146,19 @@ public class CompilationServiceImpl implements CompilationService {
                     UserDto initiator = initiators.get(event.getInitiatorId());
                     var requestsCount = confirmedRequestsCount.get(event.getId());
                     if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits(), initiator,
+                        return EventMapper.mapToShortDto(event, result.get().getHits(),
+                                initiator != null ? UserMapper.mapToUserShort(initiator) : null,
                                 requestsCount != null ? requestsCount : 0);
                     } else {
-                        return EventMapper.mapToShortDto(event, 0L, initiator,
+                        return EventMapper.mapToShortDto(event, 0L,
+                                initiator != null ? UserMapper.mapToUserShort(initiator) : null,
                                 requestsCount != null ? requestsCount : 0);
                     }
                 })
                 .collect(Collectors.toList());
     }
 
-    private List<UserDto> getAllUsersForEvents(List<Event> events) {
+    private List<UserDto> getAllInitiators(List<Event> events) {
         List<Long> ids = events.stream().map(Event::getInitiatorId).distinct().toList();
         List<UserDto> users = userServiceClient.getAllUsers(ids, 0, ids.size());
         if (users.size() < ids.size()) {

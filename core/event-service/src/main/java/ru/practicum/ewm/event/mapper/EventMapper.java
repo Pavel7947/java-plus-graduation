@@ -42,7 +42,7 @@ public class EventMapper {
                 .build();
     }
 
-    public EventFullDto mapToFullDto(Event event, Long views, UserDto initiator, Integer confirmedRequests) {
+    public EventFullDto mapToFullDto(Event event, Long views, UserShortDto initiator, Integer confirmedRequests) {
         return EventFullDto.builder()
                 .id(event.getId())
                 .annotation(event.getAnnotation())
@@ -52,7 +52,7 @@ public class EventMapper {
                 .publishedOn(event.getPublishedOn())
                 .description(event.getDescription())
                 .eventDate(event.getEventDate())
-                .initiator(mapToUserShort(initiator))
+                .initiator(initiator)
                 .location(Location.builder().lat(event.getLat()).lon(event.getLon()).build())
                 .paid(event.getPaid())
                 .views(views)
@@ -64,7 +64,7 @@ public class EventMapper {
                 .build();
     }
 
-    public EventShortDto mapToShortDto(Event event, Long views, UserDto initiator, Integer confirmedRequests) {
+    public EventShortDto mapToShortDto(Event event, Long views, UserShortDto initiator, Integer confirmedRequests) {
         return EventShortDto.builder()
                 .annotation(event.getAnnotation())
                 .category(CategoryMapper.toCategoryDto(event.getCategory()))
@@ -72,7 +72,7 @@ public class EventMapper {
                 .eventDate(event.getEventDate())
                 .publishedOn(event.getPublishedOn())
                 .id(event.getId())
-                .initiator(mapToUserShort(initiator))
+                .initiator(initiator)
                 .paid(event.getPaid())
                 .title(event.getTitle())
                 .views(views)
@@ -97,8 +97,10 @@ public class EventMapper {
                     .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
                     .findFirst();
             Integer confirmedRequestsCount = confirmedRequestsCountMap.get(eventId);
+            UserDto initiator = initiatorsMap.get(event.getInitiatorId());
             return mapToShortDto(event,
-                    stat.isPresent() ? stat.get().getHits() : 0L, initiatorsMap.get(event.getInitiatorId()),
+                    stat.isPresent() ? stat.get().getHits() : 0L,
+                    initiator != null ? UserMapper.mapToUserShort(initiator) : null,
                     confirmedRequestsCount != null ? confirmedRequestsCount : 0);
         }).toList();
     }
@@ -114,17 +116,12 @@ public class EventMapper {
                     Optional<StatsDto> stat = statsList.stream()
                             .filter(statsDto -> statsDto.getUri().equals("/events/" + eventId))
                             .findFirst();
+                    UserDto initiator = initiatorsMap.get(event.getInitiatorId());
                     var requests = confirmedRequestsCountMap.get(eventId);
                     return mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
-                            initiatorsMap.get(event.getInitiatorId()), requests != null ? requests : 0);
+                            initiator != null ? UserMapper.mapToUserShort(initiator) : null,
+                            requests != null ? requests : 0);
                 })
                 .toList();
-    }
-
-    private UserShortDto mapToUserShort(UserDto userDto) {
-        return UserShortDto.builder()
-                .id(userDto.getId())
-                .name(userDto.getName())
-                .build();
     }
 }
