@@ -7,8 +7,7 @@ import ru.practicum.ewm.dto.event.SortType;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder

@@ -6,7 +6,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import ru.practicum.ewm.dto.event.Location;
@@ -19,7 +19,7 @@ import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @NoArgsConstructor
 @AllArgsConstructor
-@Getter
+@Data
 public class UpdateEventUserRequest {
     @Size(min = 20, max = 2000)
     String annotation;

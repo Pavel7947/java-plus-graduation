@@ -33,6 +33,6 @@ public interface EventServiceAdminResource {
                               @RequestParam(defaultValue = "true") Boolean includeAuthorAdditionalInfo);
 
     @PatchMapping("/admin/events/{eventId}")
-    public EventFullDto updateEvent(@PositiveOrZero @PathVariable Long eventId,
-                                    @RequestBody UpdateEventAdminRequest updateEventAdminRequest);
+    EventFullDto updateEvent(@PositiveOrZero @PathVariable Long eventId,
+                             @RequestBody UpdateEventAdminRequest updateEventAdminRequest);
 }

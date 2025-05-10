@@ -13,8 +13,7 @@ import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Getter
-@Setter
+@Data
 public class CommentDto {
     Long id;
     String text;

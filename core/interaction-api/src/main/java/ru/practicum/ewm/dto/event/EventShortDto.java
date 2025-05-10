@@ -14,8 +14,7 @@ import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Getter
-@Setter
+@Data
 public class EventShortDto {
     Long id;
     String annotation;

@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 
-@Getter
+@Data
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @NoArgsConstructor
