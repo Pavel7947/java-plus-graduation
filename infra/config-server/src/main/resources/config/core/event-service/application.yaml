@@ -1,0 +1,51 @@
+server:
+  port: 0
+
+ewm:
+  service:
+    name: ewm-service
+
+spring:
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+  sql:
+    init:
+      mode: always
+
+  datasource:
+    driverClassName: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/main
+    username: event-service
+    password: 5432
+stats:
+  server:
+    name:
+      stats-server
+resilience4j.circuitbreaker:
+  configs:
+    default:
+      slidingWindowSize: 50
+      failureRateThreshold: 50
+  instances:
+    user-service:
+      slidingWindowSize: 20
+      waitDurationInOpenState: 10000
+      permittedNumberOfCallsInHalfOpenState: 5
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true
+    request-service:
+      slidingWindowSize: 20
+      waitDurationInOpenState: 10000
+      permittedNumberOfCallsInHalfOpenState: 5
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true
