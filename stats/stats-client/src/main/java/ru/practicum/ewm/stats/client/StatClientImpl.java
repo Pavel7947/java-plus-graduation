@@ -1,6 +1,7 @@
 package ru.practicum.ewm.stats.client;
 
 import lombok.extern.slf4j.Slf4j;
+import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -17,15 +18,18 @@ import ru.practicum.ewm.stats.dto.EndpointHitDto;
 import ru.practicum.ewm.stats.dto.StatsDto;
 import ru.practicum.ewm.stats.exceptions.RestClientRuntimeException;
 import ru.practicum.ewm.stats.exceptions.StatsServerUnavailable;
+import ru.practicum.ewm.stats.protobuf.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 @Service
 @Slf4j
 public class StatClientImpl implements StatClient {
-
+    @GrpcClient("analyzer")
+    private RecommendationsControllerGrpc.RecommendationsControllerBlockingStub client;
     private RestClient restClient;
     private final DiscoveryClient discoveryClient;
     private final String statsServerName;
@@ -57,6 +61,43 @@ public class StatClientImpl implements StatClient {
             restClient = getRestClient();
             return saveHit(requestBody);
         }
+    }
+
+    @Override
+    public Stream<RecommendedEventProto> getSimilarEvents(long eventId, long userId, int maxResults) {
+        SimilarEventsRequestProto request = SimilarEventsRequestProto.newBuilder()
+                .setEventId(eventId)
+                .setUserId(userId)
+                .setMaxResults(maxResults)
+                .build();
+        Iterator<RecommendedEventProto> iterator = client.getSimilarEvents(request);
+        return asStream(iterator);
+    }
+
+    @Override
+    public Stream<RecommendedEventProto> getRecommendationsForUser(long userId, int maxResult) {
+        UserPredictionsRequestProto request = UserPredictionsRequestProto.newBuilder()
+                .setUserId(userId)
+                .setMaxResults(maxResult)
+                .build();
+        Iterator<RecommendedEventProto> iterator = client.getRecommendationsForUser(request);
+        return asStream(iterator);
+    }
+
+    @Override
+    public Stream<RecommendedEventProto> getInteractionsCount(List<Long> eventIdList) {
+        InteractionsCountRequestProto request = InteractionsCountRequestProto.newBuilder()
+                .addAllEventId(eventIdList)
+                .build();
+        Iterator<RecommendedEventProto> iterator = client.getInteractionsCount(request);
+        return asStream(iterator);
+    }
+
+    private Stream<RecommendedEventProto> asStream(Iterator<RecommendedEventProto> iterator) {
+        return StreamSupport.stream(
+                Spliterators.spliteratorUnknownSize(iterator, Spliterator.ORDERED),
+                false
+        );
     }
 
     public List<StatsDto> getStats(LocalDateTime start, LocalDateTime end, String uris, boolean unique) {
