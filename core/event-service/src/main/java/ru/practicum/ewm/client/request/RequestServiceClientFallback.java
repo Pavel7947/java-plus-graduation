@@ -11,7 +11,7 @@ import java.util.List;
 public class RequestServiceClientFallback implements RequestServiceClient {
 
     @Override
-    public List<RequestDto> getAllRequests(List<Long> eventIds, Boolean confirmed, Integer from, Integer size) {
+    public List<RequestDto> getAllRequests(List<Long> eventIds, List<Long> userIds, Boolean confirmed, Integer from, Integer size) {
         log.info("Неудалось получить данные от request-service. Вернул пустой список");
         return List.of();
     }

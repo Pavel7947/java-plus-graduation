@@ -41,7 +41,7 @@ public class RecommendationsHandlerImpl implements RecommendationsHandler {
         List<EventSimilarity> similarNeighborList = eventsSimilarityRepository
                 .findAllByEventAInOrEventBIn(recentVisits, recentVisits, Sort.by("score").descending());
         Set<Long> unvisitedEventIds = getUnvisitedEvents(similarNeighborList, userId);
-        Set<Long> recommendedEvents = new LinkedHashSet<>();
+        Set<Long> recommendedEvents = new HashSet<>();
         for (EventSimilarity eventSimilarity : similarNeighborList) {
             if (recommendedEvents.size() == request.getMaxResults()) break;
             Long eventA = eventSimilarity.getEventA();
@@ -80,7 +80,14 @@ public class RecommendationsHandlerImpl implements RecommendationsHandler {
                 count++;
             }
         }
+        Map<Long, Double> predictedScore = getPredictedScore(eventSimilarityForCalculate, userActionsMap);
+        return recommendedEvents.stream().map(eventId -> RecommendedEventProto.newBuilder()
+                .setEventId(eventId)
+                .setScore(predictedScore.get(eventId))
+                .build()).sorted(Comparator.comparing(RecommendedEventProto::getScore).reversed()).toList();
+    }
 
+    private Map<Long, Double> getPredictedScore(Map<Long, Map<Long, EventSimilarity>> eventSimilarityForCalculate, Map<Long, Double> userActionsMap) {
         Map<Long, Double> predictedScore = new HashMap<>();
         for (Map.Entry<Long, Map<Long, EventSimilarity>> entry : eventSimilarityForCalculate.entrySet()) {
             double weightedScoreSum = 0.0;
@@ -93,10 +100,7 @@ public class RecommendationsHandlerImpl implements RecommendationsHandler {
             }
             predictedScore.put(entry.getKey(), weightedScoreSum / scoreSum);
         }
-        return recommendedEvents.stream().map(eventId -> RecommendedEventProto.newBuilder()
-                .setEventId(eventId)
-                .setScore(predictedScore.get(eventId))
-                .build()).toList();
+        return predictedScore;
     }
 
     @Override

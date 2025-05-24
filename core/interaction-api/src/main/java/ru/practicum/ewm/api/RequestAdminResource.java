@@ -12,6 +12,7 @@ public interface RequestAdminResource {
 
     @GetMapping("admin/requests")
     List<RequestDto> getAllRequests(@RequestParam(required = false) List<Long> eventIds,
+                                    @RequestParam(required = false) List<Long> userIds,
                                     @RequestParam(required = false) Boolean confirmed,
                                     @PositiveOrZero @RequestParam(defaultValue = "0") Integer from,
                                     @Positive @RequestParam(defaultValue = "10") Integer size);

@@ -12,6 +12,7 @@ import java.util.List;
 @Builder(toBuilder = true)
 public class RequestSearchFilter {
     List<Long> eventIds;
+    List<Long> userIds;
     Boolean confirmed;
     Integer from;
     Integer size;

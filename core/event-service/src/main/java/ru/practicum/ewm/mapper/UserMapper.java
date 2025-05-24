@@ -1,4 +1,4 @@
-package ru.practicum.ewm.event.mapper;
+package ru.practicum.ewm.mapper;
 
 import lombok.experimental.UtilityClass;
 import ru.practicum.ewm.dto.user.UserDto;

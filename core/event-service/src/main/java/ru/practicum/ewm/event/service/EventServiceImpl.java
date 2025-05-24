@@ -21,15 +21,15 @@ import ru.practicum.ewm.event.dto.EventAdminFilter;
 import ru.practicum.ewm.event.dto.EventPublicFilter;
 import ru.practicum.ewm.event.dto.NewEventDto;
 import ru.practicum.ewm.event.dto.UpdateEventUserRequest;
-import ru.practicum.ewm.event.mapper.EventMapper;
-import ru.practicum.ewm.event.mapper.UserMapper;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.event.model.QEvent;
 import ru.practicum.ewm.event.repository.EventRepository;
 import ru.practicum.ewm.exception.*;
+import ru.practicum.ewm.mapper.EventMapper;
+import ru.practicum.ewm.mapper.UserMapper;
 import ru.practicum.ewm.stats.client.StatClient;
-import ru.practicum.ewm.stats.dto.EndpointHitDto;
-import ru.practicum.ewm.stats.dto.StatsDto;
+import ru.practicum.ewm.stats.client.UserActionType;
+import ru.practicum.ewm.stats.protobuf.RecommendedEventProto;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -65,7 +65,7 @@ public class EventServiceImpl implements EventService {
             eventDto.setCommenting(true);
         }
         Event event = eventRepository.save(EventMapper.mapToEvent(eventDto, category, initiator.getId()));
-        return EventMapper.mapToFullDto(event, 0L, UserMapper.mapToUserShort(initiator), 0);
+        return EventMapper.mapToFullDto(event, 0.0, UserMapper.mapToUserShort(initiator), 0);
     }
 
     @Override
@@ -77,7 +77,7 @@ public class EventServiceImpl implements EventService {
         if (events.isEmpty()) {
             return List.of();
         }
-        return EventMapper.mapToShortDto(events, List.of(initiator), getStats(events, false), getConfirmedRequests(events));
+        return EventMapper.mapToShortDto(events, List.of(initiator), getRating(events), getConfirmedRequests(events));
     }
 
     @Override
@@ -87,15 +87,11 @@ public class EventServiceImpl implements EventService {
         if (!Objects.equals(event.getInitiatorId(), userId)) {
             throw new ValidationException("Можно просмотреть только своё событие");
         }
-        Optional<StatsDto> stats = getStats(List.of(event), false).stream().findFirst();
+        Optional<RecommendedEventProto> ratingOpt = getRating(List.of(event)).stream().findFirst();
+        double rating = ratingOpt.map(RecommendedEventProto::getScore).orElse(0.0);
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-        if (stats.isPresent()) {
-            return EventMapper.mapToFullDto(event, stats.get().getHits(), UserMapper.mapToUserShort(initiator),
-                    confirmedRequestCount);
-        } else {
-            return EventMapper.mapToFullDto(event, 0L, UserMapper.mapToUserShort(initiator),
-                    confirmedRequestCount);
-        }
+        return EventMapper.mapToFullDto(event, rating, UserMapper.mapToUserShort(initiator),
+                confirmedRequestCount);
     }
 
     @Override
@@ -156,7 +152,7 @@ public class EventServiceImpl implements EventService {
             }
         }
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-        return EventMapper.mapToFullDto(event, 0L, UserMapper.mapToUserShort(initiator),
+        return EventMapper.mapToFullDto(event, 0.0, UserMapper.mapToUserShort(initiator),
                 confirmedRequestCount);
     }
 
@@ -201,32 +197,34 @@ public class EventServiceImpl implements EventService {
             }
         }
         List<EventShortDto> result = EventMapper.mapToShortDto(events, getInitiators(events),
-                getStats(events, false), confirmedRequestsCountMap);
+                getRating(events), confirmedRequestsCountMap);
         List<EventShortDto> resultList = new ArrayList<>(result);
 
         switch (inputFilter.getSort()) {
             case EVENT_DATE -> resultList.sort(Comparator.comparing(EventShortDto::getEventDate));
-            case VIEWS -> resultList.sort(Comparator.comparing(EventShortDto::getViews).reversed());
+            case RATING -> resultList.sort(Comparator.comparing(EventShortDto::getRating).reversed());
         }
-
-        saveHit(httpServletRequest);
-
         return resultList;
     }
 
     //public Получение подробной информации об опубликованном событии по его идентификатору
     @Override
-    public EventFullDto getPublicEventById(HttpServletRequest httpServletRequest, Long id) {
-        Event event = eventRepository.findById(id).orElseThrow(
-                () -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", id)));
+    public EventFullDto getPublicEventById(Long userId, Long eventId) {
+        Event event = eventRepository.findById(eventId).orElseThrow(
+                () -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", eventId)));
         if (event.getState() != State.PUBLISHED)
             throw new NotFoundException("Посмотреть можно только опубликованное событие.");
-        Optional<StatsDto> stat = getStats(List.of(event), true).stream().findFirst();
+        Optional<RecommendedEventProto> rating = getRating(List.of(event)).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-        EventFullDto result = EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+        EventFullDto result = EventMapper.mapToFullDto(event, rating.map(RecommendedEventProto::getScore).orElse(0.0),
                 UserMapper.mapToUserShort(initiator), confirmedRequestCount);
-        saveHit(httpServletRequest);
+        try {
+            statClient.collectUserAction(userId, eventId, UserActionType.VIEW);
+            log.info("Передали информацию просмотре пользователем: {} события: {} в сервис рекомендаций", userId, eventId);
+        } catch (SaveStatsException e) {
+            log.error("Не удалось передать информацию о просмотре пользователем: {} события: {}", userId, eventId, e);
+        }
         return result;
     }
 
@@ -264,7 +262,7 @@ public class EventServiceImpl implements EventService {
         } else {
             confirmedRequests = List.of();
         }
-        return EventMapper.mapToFullDto(events, getInitiators(events), getStats(events, false), confirmedRequests);
+        return EventMapper.mapToFullDto(events, getInitiators(events), getRating(events), confirmedRequests);
     }
 
 
@@ -325,10 +323,10 @@ public class EventServiceImpl implements EventService {
         }
         event = eventRepository.save(event);
 
-        Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
+        Optional<RecommendedEventProto> rating = getRating(List.of(event)).stream().findFirst();
         UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
         int confirmedRequestCount = getConfirmedRequests(List.of(event)).size();
-        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+        return EventMapper.mapToFullDto(event, rating.map(RecommendedEventProto::getScore).orElse(0.0),
                 UserMapper.mapToUserShort(initiator), confirmedRequestCount);
     }
 
@@ -346,8 +344,34 @@ public class EventServiceImpl implements EventService {
         } else {
             initiator = UserDto.builder().id(event.getInitiatorId()).build();
         }
-        Optional<StatsDto> stat = getStats(List.of(event), false).stream().findFirst();
-        return EventMapper.mapToFullDto(event, stat.isPresent() ? stat.get().getHits() : 0L,
+        Optional<RecommendedEventProto> rating = getRating(List.of(event)).stream().findFirst();
+        return EventMapper.mapToFullDto(event, rating.map(RecommendedEventProto::getScore).orElse(0.0),
+                UserMapper.mapToUserShort(initiator), confirmedRequestCount);
+    }
+
+    @Override
+    public List<EventShortDto> getRecommendedEvents(Long userId, Integer maxResult) {
+        List<Long> eventIds = statClient.getRecommendationsForUser(userId, maxResult)
+                .map(RecommendedEventProto::getEventId).toList();
+        List<Event> events = eventRepository.findAllByIdIn(eventIds);
+        return EventMapper.mapToShortDto(events, getInitiators(events), getRating(events), getConfirmedRequests(events));
+    }
+
+    @Override
+    public EventShortDto likeEvent(Long userId, Long eventId) {
+        Event event = eventRepository.findById(eventId).orElseThrow(
+                () -> new NotFoundRecordInBDException(String.format("Не найдено событие в БД с ID = %d.", eventId)));
+        List<RequestDto> confirmedRequests = getConfirmedRequests(List.of(event));
+        boolean isParticipant = confirmedRequests.stream().anyMatch(requestDto -> requestDto.getRequester().equals(userId));
+        ;
+        if (!isParticipant) {
+            throw new BadRequestException("Пользователь не может лайкать событие в котором не учавствовал");
+        }
+        statClient.collectUserAction(userId, eventId, UserActionType.LIKE);
+        Optional<RecommendedEventProto> rating = getRating(List.of(event)).stream().findFirst();
+        UserDto initiator = userServiceClient.getUserById(event.getInitiatorId());
+        int confirmedRequestCount = confirmedRequests.size();
+        return EventMapper.mapToShortDto(event, rating.map(RecommendedEventProto::getScore).orElse(0.0),
                 UserMapper.mapToUserShort(initiator), confirmedRequestCount);
     }
 
@@ -410,7 +434,7 @@ public class EventServiceImpl implements EventService {
         boolean hasMoreElements = true;
         int from = 0;
         while (hasMoreElements) {
-            List<RequestDto> requests = requestClient.getAllRequests(eventIds, true, from, 100);
+            List<RequestDto> requests = requestClient.getAllRequests(eventIds, null, true, from, 100);
             confirmedRequests.addAll(requests);
             hasMoreElements = requests.size() == 100;
             from += 100;
@@ -418,31 +442,7 @@ public class EventServiceImpl implements EventService {
         return confirmedRequests;
     }
 
-    private void saveHit(HttpServletRequest httpServletRequest) {
-        try {
-            EndpointHitDto requestBody = EndpointHitDto
-                    .builder().app(serviceName)
-                    .ip(httpServletRequest.getRemoteAddr())
-                    .uri(httpServletRequest.getRequestURI())
-                    .timestamp(LocalDateTime.now())
-                    .build();
-
-            statClient.saveHit(requestBody);
-            log.info("Сохранение статистики.");
-        } catch (SaveStatsException e) {
-            log.error("Не удалось сохранить статистику.");
-        }
-    }
-
-    private List<StatsDto> getStats(List<Event> events, Boolean unique) {
-        List<String> urisList = events
-                .stream()
-                .map(event -> "/events/" + event.getId())
-                .toList();
-
-        String uris = String.join(", ", urisList);
-        return statClient.getStats(events.getFirst().getCreatedOn().minusSeconds(1),
-                LocalDateTime.now(), uris, unique);
-
+    private List<RecommendedEventProto> getRating(List<Event> events) {
+        return statClient.getInteractionsCount(events.stream().map(Event::getId).toList()).toList();
     }
 }

@@ -16,15 +16,13 @@ import ru.practicum.ewm.compilation.repository.CompilationRepository;
 import ru.practicum.ewm.dto.event.EventShortDto;
 import ru.practicum.ewm.dto.request.RequestDto;
 import ru.practicum.ewm.dto.user.UserDto;
-import ru.practicum.ewm.event.mapper.EventMapper;
-import ru.practicum.ewm.event.mapper.UserMapper;
 import ru.practicum.ewm.event.model.Event;
 import ru.practicum.ewm.event.repository.EventRepository;
 import ru.practicum.ewm.exception.NotFoundException;
+import ru.practicum.ewm.mapper.EventMapper;
 import ru.practicum.ewm.stats.client.StatClient;
-import ru.practicum.ewm.stats.dto.StatsDto;
+import ru.practicum.ewm.stats.protobuf.RecommendedEventProto;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -54,6 +52,7 @@ public class CompilationServiceImpl implements CompilationService {
             newCompilationDto.setPinned(false);
         }
         Compilation compilation = compilationRepository.save(CompilationMapper.toCompilation(newCompilationDto, events));
+
         return CompilationMapper.toCompilationDto(compilation, mapToEventShort(events));
 
     }
@@ -131,31 +130,11 @@ public class CompilationServiceImpl implements CompilationService {
         if (events.isEmpty()) {
             return Collections.emptyList();
         }
-        LocalDateTime minTime = events.stream().map(Event::getCreatedOn).min(Comparator.comparing(Function.identity())).get();
-        List<String> urisList = events.stream().map(event -> "/events/" + event.getId()).toList();
-        String uris = String.join(", ", urisList);
-        List<StatsDto> statsList = statClient.getStats(minTime.minusSeconds(1), LocalDateTime.now(), uris, false);
-        Map<Long, UserDto> initiators = getAllInitiators(events).stream()
-                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
-        Map<Long, Integer> confirmedRequestsCount = getConfirmedRequestsForEvents(events).stream()
-                .collect(Collectors.groupingBy(RequestDto::getEvent, Collectors.reducing(0, e -> 1, Integer::sum)));
-        return events.stream().map(event -> {
-                    Optional<StatsDto> result = statsList.stream()
-                            .filter(statsDto -> statsDto.getUri().equals("/events/" + event.getId()))
-                            .findFirst();
-                    UserDto initiator = initiators.get(event.getInitiatorId());
-                    var requestsCount = confirmedRequestsCount.get(event.getId());
-                    if (result.isPresent()) {
-                        return EventMapper.mapToShortDto(event, result.get().getHits(),
-                                initiator != null ? UserMapper.mapToUserShort(initiator) : null,
-                                requestsCount != null ? requestsCount : 0);
-                    } else {
-                        return EventMapper.mapToShortDto(event, 0L,
-                                initiator != null ? UserMapper.mapToUserShort(initiator) : null,
-                                requestsCount != null ? requestsCount : 0);
-                    }
-                })
-                .collect(Collectors.toList());
+        List<RecommendedEventProto> ratingList = statClient
+                .getInteractionsCount(events.stream().map(Event::getId).toList()).toList();
+        List<UserDto> initiators = getAllInitiators(events);
+        List<RequestDto> confirmedRequestsCount = getConfirmedRequestsForEvents(events);
+        return EventMapper.mapToShortDto(events, initiators, ratingList, confirmedRequestsCount);
     }
 
     private List<UserDto> getAllInitiators(List<Event> events) {
@@ -178,7 +157,7 @@ public class CompilationServiceImpl implements CompilationService {
         boolean hasMoreElements = true;
         int from = 0;
         while (hasMoreElements) {
-            List<RequestDto> requests = requestClient.getAllRequests(eventIds, true, from, 100);
+            List<RequestDto> requests = requestClient.getAllRequests(eventIds, null, true, from, 100);
             confirmedRequests.addAll(requests);
             hasMoreElements = requests.size() == 100;
             from += 100;
