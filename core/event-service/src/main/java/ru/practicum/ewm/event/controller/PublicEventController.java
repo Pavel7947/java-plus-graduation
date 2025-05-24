@@ -24,7 +24,7 @@ import static ru.practicum.ewm.dto.DateTimeFormat.TIME_PATTERN;
 @RestController
 @RequestMapping("/events")
 public class PublicEventController {
-
+    private static final String USER_ID_HTTP_HEADER = "X-EWM-USER-ID";
     private final EventService eventService;
 
     @GetMapping
@@ -68,14 +68,25 @@ public class PublicEventController {
     }
 
     @GetMapping("/{id}")
-    public EventFullDto getEventById(HttpServletRequest httpServletRequest, @PathVariable("id") @Positive Long id) {
+    public EventFullDto getEventById(@RequestHeader(USER_ID_HTTP_HEADER) Long userId, @PathVariable("id") @Positive Long id) {
         log.info("Получение подробной информации об опубликованном событии по его идентификатору.");
-
         try {
-            return eventService.getPublicEventById(httpServletRequest, id);
+            return eventService.getPublicEventById(userId, id);
         } catch (Exception e) {
             log.error("При запуске с параметрами id " + id, e);
             throw e;
         }
+    }
+
+    @GetMapping("/recommendations")
+    public List<EventShortDto> getRecommendedEvents(@RequestHeader(USER_ID_HTTP_HEADER) Long userId,
+                                                    @RequestParam(defaultValue = "20") Integer maxResult) {
+        return eventService.getRecommendedEvents(userId, maxResult);
+    }
+
+    @PutMapping("/{eventId}/like")
+    public EventShortDto likeEvent(@RequestHeader(USER_ID_HTTP_HEADER) Long userId,
+                                   @PathVariable("eventId") @Positive Long eventId) {
+        return eventService.likeEvent(userId, eventId);
     }
 }

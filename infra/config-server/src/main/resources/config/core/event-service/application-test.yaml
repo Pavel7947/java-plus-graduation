@@ -1,6 +1,17 @@
 server:
   port: 0
-
+grpc:
+  client:
+    analyzer:
+      address: 'discovery:///analyzer'
+      enableKeepAlive: true
+      keepAliveWithoutCalls: true
+      negotiationType: plaintext
+    collector:
+      address: 'discovery:///collector'
+      enableKeepAlive: true
+      keepAliveWithoutCalls: true
+      negotiationType: plaintext
 ewm:
   service:
     name: event-service
@@ -26,11 +37,6 @@ spring:
     url: jdbc:h2:mem:main
     username: main
     password: main
-stats:
-  server:
-    name:
-      stats-server
-
 resilience4j.circuitbreaker:
   configs:
     default:

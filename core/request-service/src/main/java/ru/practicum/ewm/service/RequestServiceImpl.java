@@ -22,6 +22,8 @@ import ru.practicum.ewm.mapper.RequestMapper;
 import ru.practicum.ewm.model.QRequest;
 import ru.practicum.ewm.model.Request;
 import ru.practicum.ewm.repository.RequestRepository;
+import ru.practicum.ewm.stats.client.StatClient;
+import ru.practicum.ewm.stats.client.UserActionType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +38,7 @@ public class RequestServiceImpl implements RequestService {
     private final RequestRepository requestRepository;
     private final UserServiceClient userServiceClient;
     private final EventServiceClient eventServiceClient;
+    private final StatClient statClient;
 
     @Transactional
     @Override
@@ -64,12 +67,13 @@ public class RequestServiceImpl implements RequestService {
             status = Status.CONFIRMED;
         } else
             status = Status.PENDING;
-        Request request = Request.builder()
+        Request request = requestRepository.save(Request.builder()
                 .requesterId(userId)
                 .eventId(eventId)
                 .status(status)
-                .build();
-        return RequestMapper.toRequestDto(requestRepository.save(request));
+                .build());
+        statClient.collectUserAction(userId, eventId, UserActionType.REGISTER);
+        return RequestMapper.toRequestDto(request);
     }
 
     @Transactional
@@ -98,6 +102,9 @@ public class RequestServiceImpl implements RequestService {
         }
         if (filter.getEventIds() != null) {
             conditions = conditions.and(QRequest.request.eventId.in(filter.getEventIds()));
+        }
+        if (filter.getUserIds() != null) {
+            conditions = conditions.and(QRequest.request.requesterId.in(filter.getUserIds()));
         }
         return RequestMapper
                 .toRequestDto(requestRepository.findAll(conditions, pageable).getContent());

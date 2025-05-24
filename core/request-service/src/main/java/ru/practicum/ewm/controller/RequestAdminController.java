@@ -19,10 +19,12 @@ public class RequestAdminController implements RequestAdminResource {
     private final RequestService requestService;
 
     @Override
-    public List<RequestDto> getAllRequests(List<Long> eventIds, Boolean confirmed, Integer from, Integer size) {
+    public List<RequestDto> getAllRequests(List<Long> eventIds, List<Long> userIds,
+                                           Boolean confirmed, Integer from, Integer size) {
         log.info("Поступил запрос на получение всех заявок на участие");
         return requestService.getAllRequests(RequestSearchFilter.builder()
                 .eventIds(eventIds)
+                .userIds(userIds)
                 .confirmed(confirmed)
                 .from(from)
                 .size(size)
