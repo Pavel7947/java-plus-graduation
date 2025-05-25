@@ -41,7 +41,7 @@ public class UserActionProcessor implements Runnable {
             Runtime.getRuntime().addShutdownHook(new Thread(consumer::wakeup));
             while (true) {
                 ConsumerRecords<Long, UserActionAvro> records =
-                        consumer.poll(Duration.ofSeconds(properties.getPollDurationSeconds().getUser_action()));
+                        consumer.poll(Duration.ofSeconds(properties.getPollDurationSeconds().getUserAction()));
                 if (!records.isEmpty()) {
                     log.info("Поступили в обработку записи кол-во: {}", records.count());
                 }

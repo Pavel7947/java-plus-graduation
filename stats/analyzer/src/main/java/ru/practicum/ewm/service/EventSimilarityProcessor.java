@@ -35,7 +35,7 @@ public class EventSimilarityProcessor implements Runnable {
             Runtime.getRuntime().addShutdownHook(new Thread(consumer::wakeup));
             while (true) {
                 ConsumerRecords<Long, EventSimilarityAvro> records =
-                        consumer.poll(Duration.ofSeconds(properties.getPollDurationSeconds().getEvent_similarity()));
+                        consumer.poll(Duration.ofSeconds(properties.getPollDurationSeconds().getEventSimilarity()));
                 if (!records.isEmpty()) {
                     log.info("Поступили в обработку записи кол-во: {}", records.count());
                 }

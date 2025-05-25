@@ -15,11 +15,11 @@ public class KafkaConsumerConfig {
 
     @Bean
     public Consumer<Long, UserActionAvro> getConsumerAction() {
-        return new KafkaConsumer<>(properties.getUser_action());
+        return new KafkaConsumer<>(properties.getUserAction());
     }
 
     @Bean
     public Consumer<Long, EventSimilarityAvro> getConsumerSimilarity() {
-        return new KafkaConsumer<>(properties.getEvent_similarity());
+        return new KafkaConsumer<>(properties.getEventSimilarity());
     }
 }

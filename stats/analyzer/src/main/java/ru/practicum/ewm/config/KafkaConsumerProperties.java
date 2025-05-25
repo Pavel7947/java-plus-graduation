@@ -12,15 +12,15 @@ import java.util.Properties;
 @ToString
 @ConfigurationProperties("analyzer.kafka.consumer")
 public class KafkaConsumerProperties {
-    private Properties user_action;
-    private Properties event_similarity;
+    private Properties userAction;
+    private Properties eventSimilarity;
     private PollDuration pollDurationSeconds;
 
     @ToString
     @Getter
     @Setter
     public static class PollDuration {
-        private Long user_action;
-        private Long event_similarity;
+        private Long userAction;
+        private Long eventSimilarity;
     }
 }

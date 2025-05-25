@@ -59,7 +59,8 @@ public class AggregatorService implements CommandLineRunner {
                 }
                 consumer.commitAsync((offsets, exception) -> {
                     if (exception != null) {
-                        log.warn("Во время фиксации произошла ошибка. Офсет: {}", offsets, exception);
+                        log.warn("Во время фиксации произошла ошибка. Офсет: {}. Топик: {}", offsets,
+                                StatsTopics.STATS_USER_ACTIONS_V1_TOPIC, exception);
                     }
                 });
             }
