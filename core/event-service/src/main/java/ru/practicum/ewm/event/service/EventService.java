@@ -22,11 +22,15 @@ public interface EventService {
 
     List<EventShortDto> getPublicEventsByFilter(HttpServletRequest httpServletRequest, EventPublicFilter inputFilter);
 
-    EventFullDto getPublicEventById(HttpServletRequest httpServletRequest, Long id);
+    EventFullDto getPublicEventById(Long userId, Long eventId);
 
     List<EventFullDto> getEventsForAdmin(EventAdminFilter admin);
 
     EventFullDto getEventForAdmin(Long eventId, Boolean includeConfirmedRequests, Boolean includeAuthorAdditionalInfo);
 
     EventFullDto updateEventAdmin(Long eventId, UpdateEventAdminRequest updateEventAdminRequest);
+
+    List<EventShortDto> getRecommendedEvents(Long userId, Integer maxResult);
+
+    EventShortDto likeEvent(Long userId, Long eventId);
 }

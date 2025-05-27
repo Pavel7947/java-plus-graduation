@@ -1,6 +1,17 @@
 server:
   port: 0
-
+grpc:
+  client:
+    analyzer:
+      address: 'discovery:///analyzer'
+      enableKeepAlive: true
+      keepAliveWithoutCalls: true
+      negotiationType: plaintext
+    collector:
+      address: 'discovery:///collector'
+      enableKeepAlive: true
+      keepAliveWithoutCalls: true
+      negotiationType: plaintext
 ewm:
   service:
     name: ewm-service
@@ -25,10 +36,6 @@ spring:
     url: jdbc:postgresql://localhost:5432/main
     username: event-service
     password: 5432
-stats:
-  server:
-    name:
-      stats-server
 resilience4j.circuitbreaker:
   configs:
     default:

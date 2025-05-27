@@ -37,14 +37,14 @@ services:
       - SPRING_DATASOURCE_PASSWORD=comment
     depends_on:
       comment-db:
-         condition: service_healthy
+        condition: service_healthy
 
 
   comment-db:
     image: postgres:16.1
     container_name: postgres-comment-db
-#    ports:
-#      - "5433:5432"
+    #    ports:
+    #      - "5433:5432"
     environment:
       - POSTGRES_PASSWORD=comment
       - POSTGRES_USER=comment
@@ -148,33 +148,105 @@ services:
       interval: 5s
       retries: 10
 
-  stats-server:
-    build: stats/stats-server
+  kafka:
+    image: confluentinc/confluent-local:7.4.3
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092" # for client connections
+      - "9101:9101" # JMX
+    restart: unless-stopped
     environment:
-      - EUREKA_INSTANCE_HOSTNAME=stats-server
+      KAFKA_NODE_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      CLUSTER_ID: 'K0EA9p0yEe6MkAAAAkKsEg'
+
+  kafka-init-topics:
+    image: confluentinc/confluent-local:7.4.3
+    container_name: kafka-init-topics
+    depends_on:
+      - kafka
+    command: "bash -c \
+                'kafka-topics --create --topic telemetry.sensors.v1 \
+                             --partitions 1 --replication-factor 1 --if-not-exists \
+                             --bootstrap-server kafka:29092 && \
+                kafka-topics --create --topic stats.events-similarity.v1 \
+                             --partitions 1 --replication-factor 1 --if-not-exists \
+                             --bootstrap-server kafka:29092'"
+    init: true
+
+
+  analyzer:
+    build: stats/analyzer
+    environment:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - ANALYZER_KAFKA_CONSUMER_USERACTION_BOOTSTRAP_SERVERS=kafka:29092
+      - ANALYZER_KAFKA_CONSUMER_EVENTSIMILARITY_BOOTSTRAP_SERVERS=kafka:29092
+      - EUREKA_INSTANCE_HOSTNAME=analyzer
       - SPRING_CLOUD_CONFIG_RETRY_MAX_INTERVAL=20000
       - SPRING_CLOUD_CONFIG_RETRY_MULTIPLIER=1.5
       - SPRING_CLOUD_CONFIG_RETRY_INITIAL_INTERVAL=5000
       - SPRING_CLOUD_CONFIG_RETRY_MAX_ATTEMPTS=10
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://stats-db:5432/stats
-      - SPRING_DATASOURCE_USERNAME=stats
-      - SPRING_DATASOURCE_PASSWORD=stats
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://analyzer-db:5432/analyzer
+      - SPRING_DATASOURCE_USERNAME=analyzer
+      - SPRING_DATASOURCE_PASSWORD=analyzer
     depends_on:
-      stats-db:
+      analyzer-db:
         condition: service_healthy
+      kafka-init-topics:
+        condition: service_completed_successfully
 
-  stats-db:
+  analyzer-db:
     image: postgres:16.1
-    container_name: postgres-stats-db
+    container_name: postgres-analyzer-db
     #    ports:
     #      - "5437:5432"
     environment:
-      - POSTGRES_PASSWORD=stats
-      - POSTGRES_USER=stats
-      - POSTGRES_DB=stats
+      - POSTGRES_PASSWORD=analyzer
+      - POSTGRES_USER=analyzer
+      - POSTGRES_DB=analyzer
     healthcheck:
       test: pg_isready -q -d $$POSTGRES_DB -U $$POSTGRES_USER
       timeout: 5s
       interval: 5s
       retries: 10
+
+  collector:
+    build: stats/collector
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - COLLECTOR_KAFKA_PRODUCER_BOOTSTRAP_SERVERS=kafka:29092
+      - EUREKA_INSTANCE_HOSTNAME=collector
+      - SPRING_CLOUD_CONFIG_RETRY_MAX_INTERVAL=20000
+      - SPRING_CLOUD_CONFIG_RETRY_MULTIPLIER=1.5
+      - SPRING_CLOUD_CONFIG_RETRY_INITIAL_INTERVAL=5000
+      - SPRING_CLOUD_CONFIG_RETRY_MAX_ATTEMPTS=10
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://request-db:5432/collector
+      - SPRING_DATASOURCE_USERNAME=collector
+      - SPRING_DATASOURCE_PASSWORD=collector
+    depends_on:
+      kafka-init-topics:
+        condition: service_completed_successfully
+
+  aggregator:
+    build: stats/aggregator
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - AGGREGATOR_KAFKA_PRODUCER_BOOTSTRAP_SERVERS=kafka:29092
+      - AGGREGATOR_KAFKA_CONSUMER_BASE_BOOTSTRAP_SERVERS=kafka:29092
+      - EUREKA_INSTANCE_HOSTNAME=aggregator
+      - SPRING_CLOUD_CONFIG_RETRY_MAX_INTERVAL=20000
+      - SPRING_CLOUD_CONFIG_RETRY_MULTIPLIER=1.5
+      - SPRING_CLOUD_CONFIG_RETRY_INITIAL_INTERVAL=5000
+      - SPRING_CLOUD_CONFIG_RETRY_MAX_ATTEMPTS=10
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://request-db:5432/aggregator
+      - SPRING_DATASOURCE_USERNAME=aggregator
+      - SPRING_DATASOURCE_PASSWORD=aggregator
+    depends_on:
+      kafka-init-topics:
+        condition: service_completed_successfully
